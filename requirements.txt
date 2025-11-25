@@ -1,0 +1,28 @@
+# --- Web Framework (Web 框架) ---
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+# uvicorn[standard] 包含了 uvloop 和 httptools，性能更好
+
+# --- LLM & LangChain Ecosystem (AI 核心库) ---
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-community>=0.0.10
+langchain-openai>=0.0.5
+# 如果你需要对接 DeepSeek，通常也是用 langchain-openai (兼容协议)
+
+# --- Token Calculation (OpenAI 依赖的 Token 计算库) ---
+tiktoken>=0.5.0
+
+# --- Data Validation & Settings (数据验证与配置) ---
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+# pydantic-settings 用于优雅地管理 .env 环境变量
+
+# --- Utilities (通用工具) ---
+python-dotenv>=1.0.0
+httpx>=0.26.0
+# httpx 是新一代的异步 HTTP 客户端，FastAPI 和 LangChain 底层常用
+
+# --- Logging (日志工具 - 对应 utils/logger.py) ---
+loguru>=0.7.2
+# 推荐使用 loguru 代替 Python 原生 logging，配置更简单，输出更美观

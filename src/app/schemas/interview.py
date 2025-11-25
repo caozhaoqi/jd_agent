@@ -1,0 +1,27 @@
+from typing import List
+from pydantic import BaseModel, Field
+
+# 1. 接收前端传来的 JD
+class JDRequest(BaseModel):
+    jd_text: str = Field(..., description="岗位描述的完整文本")
+    resume_text: str = Field(None, description="可选：候选人简历")
+
+# 2. JD 解析后的结构化数据
+class JDMetaData(BaseModel):
+    tech_stack: List[str] = Field(description="技术栈列表，如 Python, K8s")
+    years_required: str = Field(description="经验要求")
+    core_responsibility: str = Field(description="核心职责摘要")
+    soft_skills: List[str] = Field(description="软技能列表")
+
+# 3. 单个面试题结构
+class InterviewQuestion(BaseModel):
+    category: str = Field(description="类别：基础/原理/架构/HR")
+    question: str = Field(description="面试题")
+    reference_answer: str = Field(description="参考回答要点")
+
+# 4. 最终返回给前端的报告
+class InterviewReport(BaseModel):
+    meta: JDMetaData
+    tech_questions: List[InterviewQuestion]
+    hr_questions: List[InterviewQuestion]
+    system_design_question: InterviewQuestion
