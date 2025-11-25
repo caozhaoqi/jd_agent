@@ -1,10 +1,12 @@
-from typing import List
+from typing import List, Optional  # <--- 1. 必须导入 Optional
 from pydantic import BaseModel, Field
+
 
 # 1. 接收前端传来的 JD
 class JDRequest(BaseModel):
     jd_text: str = Field(..., description="岗位描述的完整文本")
-    resume_text: str = Field(None, description="可选：候选人简历")
+    resume_text: Optional[str] = Field(None, description="可选：候选人简历")
+
 
 # 2. JD 解析后的结构化数据
 class JDMetaData(BaseModel):
@@ -12,6 +14,8 @@ class JDMetaData(BaseModel):
     years_required: str = Field(description="经验要求")
     core_responsibility: str = Field(description="核心职责摘要")
     soft_skills: List[str] = Field(description="软技能列表")
+    company_name: Optional[str] = Field(default="", description="公司名称")
+
 
 # 3. 单个面试题结构
 class InterviewQuestion(BaseModel):
@@ -19,9 +23,12 @@ class InterviewQuestion(BaseModel):
     question: str = Field(description="面试题")
     reference_answer: str = Field(description="参考回答要点")
 
+
 # 4. 最终返回给前端的报告
 class InterviewReport(BaseModel):
     meta: JDMetaData
     tech_questions: List[InterviewQuestion]
     hr_questions: List[InterviewQuestion]
-    system_design_question: InterviewQuestion
+
+    # <--- 核心修改：加上 Optional[...] = None，允许该字段为空
+    system_design_question: Optional[InterviewQuestion] = None
