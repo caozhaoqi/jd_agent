@@ -36,9 +36,16 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
 
 
   // 自动滚动到底部
+// 1. 修改 scrollIntoView 的逻辑，增加 timeout 确保渲染完再滚
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const scrollToBottom = () => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    // 延时 100ms，等待 React 渲染和 CSS 布局完成
+    const timeoutId = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timeoutId);
+  }, [messages, isLoading]); // 监听 messages 和 isLoading 变化
 
   // 处理发送
   const handleSend = async () => {
@@ -130,7 +137,7 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
       </div>
 
       {/* --- 右侧主聊天区 --- */}
-      <div className="flex-1 flex flex-col relative bg-white">
+     <div className="flex-1 flex flex-col h-screen overflow-hidden relative bg-white">
         
         {/* 顶部标题 (移动端显示) */}
         <div className="md:hidden h-14 border-b flex items-center px-4 justify-between bg-white">
@@ -139,7 +146,7 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
         </div>
 
         {/* 消息列表 */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-32 scroll-smooth">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-64 scroll-smooth">
           <div className="max-w-3xl mx-auto space-y-8">
             {messages.map((msg, idx) => (
               <div key={idx} className={clsx("flex gap-4", msg.role === "user" ? "flex-row-reverse" : "")}>
