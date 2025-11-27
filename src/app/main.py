@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 
+from app.core.middleware import LogMiddleware
+from app.utils import logger
+
 # 1. 加载 .env 环境变量
 # 确保在导入其他依赖之前加载，这样 Settings 才能读到 Key
 load_dotenv()
@@ -37,6 +40,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 2. 注册日志中间件 (新增)
+app.add_middleware(LogMiddleware)
+
+@app.on_event("startup")
+async def startup_event():
+    logger.logger.info("🚀 System Startup: AI Agent Backend is running...")
 
 # 4. 注册路由
 # 我们将 api 路由挂载到 /api/v1 前缀下

@@ -23,6 +23,18 @@ export default function Home() {
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+// 增加一个简单的日志辅助函数
+const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success' = 'info') => {
+  const timestamp = new Date().toLocaleTimeString();
+  const styles = {
+    info: 'color: #3b82f6; font-weight: bold;',
+    success: 'color: #10b981; font-weight: bold;',
+    error: 'color: #ef4444; font-weight: bold;',
+  };
+  console.log(`%c[${timestamp}] [${stage}]`, styles[type], message);
+};
+
+
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,23 +49,33 @@ export default function Home() {
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
     setIsLoading(true);
 
+   // 1. 记录开始
+    logEvent('API_START', { url: '/api/v1/generate-guide', payload: userMsg }, 'info');
+
     try {
-      // 调用你的 FastAPI 后端
+      const startTime = performance.now(); // 计时
+
       const response = await fetch("http://127.0.0.1:8000/api/v1/generate-guide", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jd_text: userMsg,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jd_text: userMsg }),
       });
 
-      if (!response.ok) throw new Error("API 请求失败");
+      const endTime = performance.now();
+      const duration = (endTime - startTime).toFixed(0);
+
+      // 2. 记录网络层响应
+      if (!response.ok) {
+        logEvent('API_ERROR', `Status: ${response.status} | Time: ${duration}ms`, 'error');
+        throw new Error(`API Error: ${response.statusText}`);
+      }
 
       const data = await response.json();
-      
-      // 将 JSON 转换为 Markdown 格式以便渲染
+
+      // 3. 记录数据成功接收
+      logEvent('API_SUCCESS', { duration: `${duration}ms`, dataSize: JSON.stringify(data).length }, 'success');
+      console.log('📦 Server Response Data:', data); // 单独打印详细数据对象方便展开查看
+
       const markdownReport = formatReportToMarkdown(data);
 
       setMessages((prev) => [
