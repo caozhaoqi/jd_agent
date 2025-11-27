@@ -46,3 +46,11 @@
   padding-bottom: 0.5rem;
   margin: 1rem 0;
 }
+/* 强制让 HTML 和 Body 占满屏幕，禁止溢出 */
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* 关键：禁止最外层滚动 */
+  margin: 0;
+  padding: 0;
+}

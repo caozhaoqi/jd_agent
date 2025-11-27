@@ -23,20 +23,18 @@ export default function Home() {
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-// 增加一个简单的日志辅助函数
-const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success' = 'info') => {
-  const timestamp = new Date().toLocaleTimeString();
-  const styles = {
-    info: 'color: #3b82f6; font-weight: bold;',
-    success: 'color: #10b981; font-weight: bold;',
-    error: 'color: #ef4444; font-weight: bold;',
+  // 日志辅助函数
+  const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success' = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const styles = {
+      info: 'color: #3b82f6; font-weight: bold;',
+      success: 'color: #10b981; font-weight: bold;',
+      error: 'color: #ef4444; font-weight: bold;',
+    };
+    console.log(`%c[${timestamp}] [${stage}]`, styles[type], message);
   };
-  console.log(`%c[${timestamp}] [${stage}]`, styles[type], message);
-};
-
 
   // 自动滚动到底部
-// 1. 修改 scrollIntoView 的逻辑，增加 timeout 确保渲染完再滚
   useEffect(() => {
     const scrollToBottom = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -45,7 +43,7 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
     // 延时 100ms，等待 React 渲染和 CSS 布局完成
     const timeoutId = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timeoutId);
-  }, [messages, isLoading]); // 监听 messages 和 isLoading 变化
+  }, [messages, isLoading]);
 
   // 处理发送
   const handleSend = async () => {
@@ -56,11 +54,11 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
     setIsLoading(true);
 
-   // 1. 记录开始
+    // 1. 记录开始
     logEvent('API_START', { url: '/api/v1/generate-guide', payload: userMsg }, 'info');
 
     try {
-      const startTime = performance.now(); // 计时
+      const startTime = performance.now();
 
       const response = await fetch("http://127.0.0.1:8000/api/v1/generate-guide", {
         method: "POST",
@@ -81,7 +79,7 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
 
       // 3. 记录数据成功接收
       logEvent('API_SUCCESS', { duration: `${duration}ms`, dataSize: JSON.stringify(data).length }, 'success');
-      console.log('📦 Server Response Data:', data); // 单独打印详细数据对象方便展开查看
+      console.log('📦 Server Response Data:', data);
 
       const markdownReport = formatReportToMarkdown(data);
 
@@ -94,24 +92,27 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
         ...prev,
         { role: "assistant", content: "❌ 抱歉，生成指南时出错了。请检查后端服务是否启动，或者 API Key 是否有额度。" },
       ]);
+      logEvent('EXCEPTION', error, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex h-screen bg-[#f9faib] text-gray-800 font-sans">
+    // 🔴 修改 1: 使用 fixed inset-0 替代 h-screen，彻底锁死视口高度
+    <div className="fixed inset-0 flex bg-[#f9fafb] text-gray-800 font-sans">
+
       {/* --- 左侧侧边栏 (DeepSeek 风格) --- */}
-      <div className="w-[260px] bg-[#fcfdfd] border-r border-gray-200 hidden md:flex flex-col">
+      <div className="w-[260px] bg-[#fcfdfd] border-r border-gray-200 hidden md:flex flex-col h-full">
         <div className="p-4">
-          <button 
+          <button
             onClick={() => setMessages([{ role: "assistant", content: "你好！我是你的 AI 面试助手..." }])}
             className="flex items-center gap-2 w-full px-3 py-2 bg-blue-50 text-blue-600 rounded-md text-sm font-medium hover:bg-blue-100 transition-colors"
           >
             <Plus size={16} /> 新建对话
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto px-2">
           <div className="text-xs text-gray-400 px-3 py-2">最近记录</div>
           {/* 模拟历史记录 */}
@@ -137,16 +138,18 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
       </div>
 
       {/* --- 右侧主聊天区 --- */}
-     <div className="flex-1 flex flex-col h-screen overflow-hidden relative bg-white">
-        
+      {/* 🔴 修改 2: h-full 确保撑满父容器 */}
+      <div className="flex-1 flex flex-col h-full relative bg-white">
+
         {/* 顶部标题 (移动端显示) */}
-        <div className="md:hidden h-14 border-b flex items-center px-4 justify-between bg-white">
+        <div className="md:hidden h-14 border-b flex-shrink-0 flex items-center px-4 justify-between bg-white z-20">
           <span className="font-semibold">JD Agent</span>
           <Plus size={20} />
         </div>
 
         {/* 消息列表 */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-64 scroll-smooth">
+        {/* 🔴 修改 3: pb-[200px] 留出巨大底部空间，防止被输入框遮挡 */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-[200px] scroll-smooth">
           <div className="max-w-3xl mx-auto space-y-8">
             {messages.map((msg, idx) => (
               <div key={idx} className={clsx("flex gap-4", msg.role === "user" ? "flex-row-reverse" : "")}>
@@ -161,13 +164,12 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
                 {/* 气泡内容 */}
                 <div className={clsx(
                   "relative max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed",
-                  msg.role === "user" 
-                    ? "bg-[#f4f4f4] text-gray-900 rounded-tr-none" 
+                  msg.role === "user"
+                    ? "bg-[#f4f4f4] text-gray-900 rounded-tr-none"
                     : "bg-white text-gray-800 "
                 )}>
                   {msg.role === "assistant" && idx !== 0 ? (
                     <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-h2:text-blue-600 prose-h3:text-gray-700 prose-code:text-blue-600 prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-100">
-                      {/* 如果是 AI 回复，使用 Markdown 渲染 */}
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
@@ -189,12 +191,16 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
                 </div>
               </div>
             )}
+
+            {/* 🔴 修改 4: 显式垫片，确保滚动到底部时有余量 */}
+            <div className="h-20 flex-shrink-0" />
             <div ref={messagesEndRef} />
           </div>
         </div>
 
         {/* --- 底部输入框 (DeepSeek 风格悬浮) --- */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-10 pb-6 px-4">
+        {/* 🔴 修改 5: 背景渐变层高度增加 pt-20 */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-white via-white to-transparent pt-20 pb-6 px-4">
           <div className="max-w-3xl mx-auto bg-white border border-gray-200 shadow-[0_0_15px_rgba(0,0,0,0.05)] rounded-2xl p-2 relative">
             <textarea
               value={input}
@@ -209,7 +215,7 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
               className="w-full resize-none border-none outline-none text-gray-700 bg-transparent px-3 py-2 max-h-[200px] min-h-[50px] scrollbar-hide"
               rows={input.length > 50 ? 3 : 1}
             />
-            
+
             <div className="flex justify-between items-center mt-2 px-1">
               <div className="flex gap-2 text-gray-400">
                 <button className="hover:text-blue-600 p-1.5 hover:bg-gray-50 rounded-lg transition-colors">
@@ -221,8 +227,8 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
                 disabled={!input.trim() || isLoading}
                 className={clsx(
                   "p-2 rounded-lg transition-all duration-200",
-                  input.trim() && !isLoading 
-                    ? "bg-blue-600 text-white shadow-md hover:bg-blue-700" 
+                  input.trim() && !isLoading
+                    ? "bg-blue-600 text-white shadow-md hover:bg-blue-700"
                     : "bg-gray-100 text-gray-300 cursor-not-allowed"
                 )}
               >
@@ -239,7 +245,7 @@ const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success
   );
 }
 
-// --- 辅助函数：将后端 JSON 转换为美观的 Markdown ---
+// 辅助函数保持不变
 function formatReportToMarkdown(data: any) {
   const { meta, tech_questions, hr_questions, system_design_question } = data;
 
@@ -255,7 +261,7 @@ function formatReportToMarkdown(data: any) {
 ## 🛠️ 技术面试必考题 (Hardcore)
 ${tech_questions.map((q: any, i: number) => `
 ### Q${i + 1}: ${q.question}
-> **参考回答要点**:  
+> **参考回答要点**:
 > ${q.reference_answer}
 `).join('\n')}
 
@@ -264,7 +270,7 @@ ${tech_questions.map((q: any, i: number) => `
 ## 💬 HR 行为面试 (Behavioral)
 ${hr_questions.map((q: any, i: number) => `
 ### Q${i + 1}: ${q.question}
-> **参考回答要点**:  
+> **参考回答要点**:
 > ${q.reference_answer}
 `).join('\n')}
 
@@ -273,7 +279,7 @@ ${system_design_question ? `
 
 ## 🏗️ 系统设计加分题
 ### ${system_design_question.question}
-> **设计思路**:  
+> **设计思路**:
 > ${system_design_question.reference_answer}
 ` : ''}
 
