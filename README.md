@@ -47,6 +47,8 @@ pip install langchain-community langchain-text-splitters faiss-cpu sentence-tran
 存储 (Vector DB): 使用 FAISS 存储向量索引。
 检索与生成 (Retrieval & Chat): 检索相关文档 -> 喂给 DeepSeek/OpenAI -> 生成答案。
 
+# BRE model download
+hf download BAAI/bge-small-zh-v1.5
 
 python build_blog_kb.py
 python query_blog.py
