@@ -33,7 +33,7 @@ from langchain_core.output_parsers import StrOutputParser
 from app.core.llm_factory import get_llm
 
 # 路径配置 (指向生成的向量库文件夹)
-DB_LOAD_PATH = "blog_faiss_index"
+DB_LOAD_PATH = "../../../blog_faiss_index"
 
 
 def query_blog_knowledge(question: str):

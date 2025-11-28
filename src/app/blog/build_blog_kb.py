@@ -18,7 +18,7 @@ from tqdm import tqdm
 # === 配置区域 ===
 # 请确认你的博客路径是否正确
 BLOG_DIR = "/Users/caozhaoqi/Downloads/hexo-bamboo-blog/source/_posts"
-DB_SAVE_PATH = "blog_faiss_index"
+DB_SAVE_PATH = "../../../blog_faiss_index"
 
 # 配置日志格式
 logger.remove()

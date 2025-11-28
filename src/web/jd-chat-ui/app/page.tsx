@@ -245,11 +245,19 @@ export default function Home() {
   );
 }
 
-// 辅助函数保持不变
+// --- 辅助函数：将后端 JSON 转换为美观的 Markdown ---
 function formatReportToMarkdown(data: any) {
-  const { meta, tech_questions, hr_questions, system_design_question } = data;
+  // 解构所有字段，包括新增的 reference_sources
+  const {
+    meta,
+    tech_questions,
+    hr_questions,
+    system_design_question,
+    reference_sources
+  } = data;
 
-  return `
+  // 1. 基础信息 + 技术题 + HR题
+  let markdown = `
 ## 📊 岗位核心画像
 - **公司**: ${meta.company_name || '未识别'}
 - **职级要求**: ${meta.years_required}
@@ -273,16 +281,37 @@ ${hr_questions.map((q: any, i: number) => `
 > **参考回答要点**:
 > ${q.reference_answer}
 `).join('\n')}
+`;
 
-${system_design_question ? `
+  // 2. 系统设计题 (可选渲染)
+  if (system_design_question) {
+    markdown += `
 ---
 
 ## 🏗️ 系统设计加分题
 ### ${system_design_question.question}
 > **设计思路**:
 > ${system_design_question.reference_answer}
-` : ''}
+`;
+  }
 
+  // 3. 🔴 新增：知识库引用 (RAG 核心展示)
+  // 如果后端查到了相关的博客文章，这里会显示出来
+  if (reference_sources && reference_sources.length > 0) {
+    markdown += `
+---
+
+## 📚 个人知识库引用 (RAG)
+本次分析检测到您的博客中有相关技术积累，**强烈建议复习以下文章**：
+${reference_sources.map((src: string) => `- 📄 [**${src}**] (本地博客)`).join('\n')}
+`;
+  }
+
+  // 4. 底部提示
+  markdown += `
+---
 > 💡 **提示**: 建议结合你的简历项目经验来回答上述问题。
 `;
+
+  return markdown;
 }
