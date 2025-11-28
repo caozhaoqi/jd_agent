@@ -12,14 +12,122 @@ from app.core.llm_factory import get_llm
 router = APIRouter()
 
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlmodel import Session, select
+from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
+from app.core.models import User, ChatSession, ChatMessage
+from pydantic import BaseModel
+import jwt
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login")
+
+# --- 依赖：获取当前用户 ---
+async def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="无效的凭证")
+    user = session.exec(select(User).where(User.username == username)).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    return user
+
+# --- Auth 接口 ---
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+
+@router.post("/register")
+def register(req: AuthRequest, session: Session = Depends(get_session)):
+    if session.exec(select(User).where(User.username == req.username)).first():
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    user = User(username=req.username, hashed_password=get_password_hash(req.password))
+    session.add(user)
+    session.commit()
+    return {"msg": "注册成功"}
+
+@router.post("/login")
+def login(req: AuthRequest, session: Session = Depends(get_session)):
+    user = session.exec(select(User).where(User.username == req.username)).first()
+    if not user or not verify_password(req.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="用户名或密码错误")
+    token = create_access_token({"sub": user.username})
+    return {"access_token": token, "token_type": "bearer"}
+
+# --- History 接口 ---
+@router.get("/history/sessions")
+def get_sessions(user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    # 返回该用户的所有会话列表 (倒序)
+    statement = select(ChatSession).where(ChatSession.user_id == user.id).order_by(ChatSession.id.desc())
+    return session.exec(statement).all()
+
+@router.get("/history/messages/{session_id}")
+def get_messages(session_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    # 验证 session 是否属于该用户
+    chat = session.get(ChatSession, session_id)
+    if not chat or chat.user_id != user.id:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return chat.messages
+
 # --- 原有的普通接口 ---
+# 🔴 修改后的核心接口：生成指南 + 自动存库
 @router.post("/generate-guide", response_model=InterviewReport)
-async def create_guide(request: JDRequest):
+async def create_guide(
+        request: JDRequest,
+        # 1. 注入当前登录用户 (必须登录才能存历史)
+        user: User = Depends(get_current_user),
+        # 2. 注入数据库会话
+        db: Session = Depends(get_session)
+):
     """
-    接收 JD 文本，返回完整的面试准备指南 (JSON 格式)
+    接收 JD 文本，返回完整的面试准备指南，并自动保存到历史记录。
     """
-    # 调用业务逻辑层
+    # A. 调用业务逻辑生成报告
     report = await generate_interview_guide(request)
+
+    # B. --- 数据库存盘逻辑 (新增) ---
+    try:
+        # 1. 创建新的会话 (ChatSession)
+        # 使用公司名作为标题，如果没有识别到公司名，则用默认标题
+        title = f"{report.meta.company_name} 面试准备" if report.meta.company_name else "岗位 JD 分析"
+
+        new_session = ChatSession(
+            title=title,
+            user_id=user.id
+        )
+        db.add(new_session)
+        db.commit()
+        db.refresh(new_session)  # 刷新以获取生成的 ID
+
+        # 2. 保存用户的提问 (User Message)
+        user_msg = ChatMessage(
+            session_id=new_session.id,
+            role="user",
+            content=request.jd_text
+        )
+        db.add(user_msg)
+
+        # 3. 保存 AI 的回答 (Assistant Message)
+        # 注意：我们将 Pydantic 对象转为 JSON 字符串存入数据库
+        ai_msg = ChatMessage(
+            session_id=new_session.id,
+            role="assistant",
+            content=report.model_dump_json()  # Pydantic v2 写法，如果是 v1 用 .json()
+        )
+        db.add(ai_msg)
+
+        # 4. 提交保存
+        db.commit()
+
+        print(f"✅ [DB] 会话已保存: ID={new_session.id}, Title={title}")
+
+    except Exception as e:
+        print(f"❌ [DB Error] 保存历史记录失败: {e}")
+        # 注意：这里我们只打印错误，不抛出异常，避免因为存库失败导致前端收不到分析结果
+        # db.rollback()
+
     return report
 
 

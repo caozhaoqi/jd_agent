@@ -1,6 +1,16 @@
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+import os
+
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir)))
+
+# 拼接 .env 路径
+ENV_PATH = os.path.join(project_root, ".env")
+
+print(f"🔧 [Config] Loading .env from: {ENV_PATH}")
 
 class Settings(BaseSettings):
     """
@@ -40,7 +50,7 @@ class Settings(BaseSettings):
 
     # --- Pydantic 配置 ---
     model_config = SettingsConfigDict(
-        env_file=".env",  # 指定读取的文件名
+        env_file=ENV_PATH,  # 指定读取的文件名
         env_file_encoding="utf-8",  # 编码
         case_sensitive=True,  # 大小写敏感
         extra="ignore"  # 忽略 .env 中多余的字段，不报错

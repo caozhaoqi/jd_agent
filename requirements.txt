@@ -1,6 +1,10 @@
+passlib
+pyjwt
+sqlmodel
 tqdm
 langchain-huggingface
 sqlalchemy
+bcrypt==3.2.2
 langchain-text-splitters
 # --- Web Framework (Web 框架) ---
 fastapi>=0.109.0
