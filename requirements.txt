@@ -1,3 +1,5 @@
+tqdm
+langchain-huggingface
 sqlalchemy
 langchain-text-splitters
 # --- Web Framework (Web 框架) ---
