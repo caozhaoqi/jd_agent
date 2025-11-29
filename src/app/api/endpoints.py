@@ -324,3 +324,77 @@ async def stream_chat(
         generate_and_stream(),
         media_type="text/event-stream"
     )
+
+
+
+# ==========================================
+# 6. 语音交互接口 (ASR & TTS)
+# ==========================================
+
+from fastapi.responses import Response
+
+
+@router.post("/audio/transcribe")
+async def transcribe_audio(
+        file: UploadFile = File(...)
+):
+    """
+    ASR: 语音转文字 (使用 Whisper)
+    """
+    # 1. 实例化 OpenAI 客户端 (专门用于音频)
+    # 注意：这里建议使用 OpenAI 官方或者支持 Whisper 的中转商
+    from openai import OpenAI
+    from app.core.config import settings
+
+    client = OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        base_url=settings.OPENAI_API_BASE
+    )
+
+    # 2. 读取上传的音频文件
+    # Whisper API 需要文件对象
+    file_content = await file.read()
+
+    # 3. 调用 Whisper 模型
+    # 注意：如果用 DeepSeek，它暂时不支持 Audio，这里需要一个支持 Audio 的 Key
+    # 或者你可以硬编码一个专门用于 Audio 的 Client
+    try:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(file.filename, file_content, file.content_type)
+        )
+        return {"text": transcript.text}
+    except Exception as e:
+        print(f"ASR Error: {e}")
+        # 兜底：如果 API 失败，返回空
+        return {"text": "", "error": str(e)}
+
+
+@router.post("/audio/tts")
+async def text_to_speech(text: str):
+    """
+    TTS: 文字转语音
+    """
+    from openai import OpenAI
+    from app.core.config import settings
+
+    client = OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        base_url=settings.OPENAI_API_BASE
+    )
+
+    try:
+        # 调用 TTS 模型 (tts-1 或 tts-1-hd)
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="alloy",  # 可选: alloy, echo, fable, onyx, nova, shimmer
+            input=text
+        )
+
+        # 直接返回二进制音频流
+        return Response(
+            content=response.content,
+            media_type="audio/mpeg"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

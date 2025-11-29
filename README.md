@@ -92,3 +92,9 @@ python ./src/run/main.py
 # 或 (v1.0.5以前)
 python ./src/run/main_process.py
 ```
+
+- tts
+
+```shell
+npm install react-media-recorder
+```
