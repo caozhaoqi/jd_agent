@@ -25,6 +25,7 @@ type Session = {
 export default function Home() {
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); // 文件上传 Input 引用
 
   // --- 状态管理 ---
   const [input, setInput] = useState("");
@@ -66,7 +67,6 @@ export default function Home() {
     const scrollToBottom = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
-    // 延时 100ms，等待 React 渲染和 CSS 布局完成
     const timeoutId = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timeoutId);
   }, [messages, isLoading]);
@@ -113,23 +113,20 @@ export default function Home() {
       if (res.ok) {
         const msgs = await res.json();
 
-        // 🔴 核心修复：处理数据库存的 JSON 字符串
+        // 处理数据库存的 JSON 字符串
         const formattedMsgs = msgs.map((m: any) => {
           let content = m.content;
           let isJson = false;
 
-          // 如果是 AI 的回复，尝试解析 JSON 并转 Markdown
           if (m.role === "assistant") {
             try {
-              // 数据库里存的是 model_dump_json() 生成的字符串，需要 parse
               const jsonData = JSON.parse(m.content);
-              // 检查是否包含 meta 字段，确认是我们的报告格式
               if (jsonData && jsonData.meta) {
                 content = formatReportToMarkdown(jsonData);
                 isJson = true;
               }
             } catch (e) {
-              // 解析失败说明是普通文本（比如之前的测试数据），保持原样
+              // 解析失败说明是普通文本，保持原样
             }
           }
 
@@ -146,6 +143,58 @@ export default function Home() {
       console.error("加载消息失败", e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // --- 交互: 文件上传 (简历解析) ---
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 1. 检查 Token
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("登录已过期，请重新登录后上传简历！");
+      router.push("/login");
+      return;
+    }
+
+    setIsLoading(true);
+    // 2. 立即在 UI 上反馈
+    setMessages(prev => [...prev, { role: "user", content: `📄 正在上传并解析简历: **${file.name}** ...` }]);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      logEvent('UPLOAD', `Starting upload for ${file.name}`, 'info');
+
+      const res = await fetch("http://127.0.0.1:8000/api/v1/upload-resume", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+          // 浏览器会自动设置 Content-Type 为 multipart/form-data
+        },
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => [...prev, {
+            role: "assistant",
+            content: `✅ **简历解析成功！**\n\n已提取并记忆以下信息 (长期记忆)：\n${data.extracted_facts.map((f:string) => `- ${f}`).join('\n')}\n\n现在您可以发送 JD，我会结合您的简历背景为您生成攻略。`
+        }]);
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.detail || "上传失败");
+      }
+    } catch (e: any) {
+      logEvent('UPLOAD_ERR', e, 'error');
+      setMessages(prev => [...prev, { role: "assistant", content: `❌ 简历解析失败: ${e.message}` }]);
+    } finally {
+      setIsLoading(false);
+      // 清空 input，防止无法连续上传同一个文件
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -227,7 +276,6 @@ export default function Home() {
   };
 
   return (
-    // 🔴 布局修复 1: fixed inset-0 锁死高度
     <div className="fixed inset-0 flex bg-[#f9fafb] text-gray-800 font-sans">
 
       {/* --- 左侧侧边栏 --- */}
@@ -295,7 +343,6 @@ export default function Home() {
         </div>
 
         {/* 消息列表 */}
-        {/* 🔴 布局修复 2: pb-[200px] 留出底部空间 */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-[200px] scroll-smooth">
           <div className="max-w-3xl mx-auto space-y-8">
             {messages.map((msg, idx) => (
@@ -331,12 +378,11 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-2 text-gray-400 text-sm mt-2">
                    <Loader2 size={16} className="animate-spin" />
-                   <span className="animate-pulse">正在拆解 JD 并生成面试题...</span>
+                   <span className="animate-pulse">正在思考中...</span>
                 </div>
               </div>
             )}
 
-            {/* 🔴 布局修复 3: 底部垫片 */}
             <div className="h-20 flex-shrink-0" />
             <div ref={messagesEndRef} />
           </div>
@@ -361,7 +407,19 @@ export default function Home() {
 
             <div className="flex justify-between items-center mt-2 px-1">
               <div className="flex gap-2 text-gray-400">
-                <button className="hover:text-blue-600 p-1.5 hover:bg-gray-50 rounded-lg transition-colors" title="上传简历 (开发中)">
+                {/* 🔴 文件上传组件 (隐藏 Input + 触发按钮) */}
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept=".pdf,.docx,.txt"
+                    onChange={handleFileUpload}
+                />
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="hover:text-blue-600 p-1.5 hover:bg-gray-50 rounded-lg transition-colors"
+                    title="上传简历 (PDF/Word)"
+                >
                   <Paperclip size={18} />
                 </button>
               </div>
