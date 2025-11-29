@@ -459,6 +459,15 @@ function formatReportToMarkdown(data: any) {
 
 ---
 
+${company_analysis ? `
+---
+
+## 🏢 公司背景情报 (AI 背调)
+> ${company_analysis}
+` : ''}
+
+---
+
 ## 🛠️ 技术面试必考题 (Hardcore)
 ${tech_questions.map((q: any, i: number) => `
 ### Q${i + 1}: ${q.question}

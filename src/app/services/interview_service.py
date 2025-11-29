@@ -73,6 +73,8 @@ async def generate_interview_guide(
             tech_questions=final_tech_qs,
             hr_questions=hr_qs,
             system_design_question=None,
+            # ✅ 新增赋值：把调研结果返回回去
+            company_analysis=company_info,
             reference_sources=blog_sources
         )
 

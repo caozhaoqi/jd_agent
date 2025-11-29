@@ -1,62 +1,84 @@
 import os
-from typing import List, Dict
+import torch
+from typing import List, Dict, Any, Union, Coroutine
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from app.utils.logger import logger
 
-# 你的向量库路径 (请确保 build_blog_kb.py 已经运行过并在根目录生成了此文件夹)
-# DB_PATH = "blog_faiss_index"
+# 1. 确定向量库路径
+# 逻辑：当前文件 -> 上级(core) -> 上级(app) -> 上级(src) -> 项目根目录 -> blog_faiss_index
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(CURRENT_DIR)))
 DB_PATH = os.path.join(PROJECT_ROOT, "blog_faiss_index")
+
 
 class BlogKnowledgeBase:
     _instance = None
 
     def __new__(cls):
+        """单例模式：确保全局只有一个知识库实例，避免重复加载模型占用内存"""
         if cls._instance is None:
             cls._instance = super(BlogKnowledgeBase, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
 
     def _initialize(self):
-        """初始化加载模型和向量库 (单例模式，只加载一次)"""
+        """初始化加载模型和向量库"""
         logger.info("📚 [KB] Initializing Blog Knowledge Base...")
         try:
-            # 1. 初始化 Embedding (使用国内镜像逻辑)
+            # 2. 自动检测最佳硬件设备 (MPS > CUDA > CPU)
+            if torch.backends.mps.is_available():
+                # 适配 macOS M系列芯片 (M1/M2/M3/M4)
+                device = "mps"
+                logger.info("🚀 [KB] Using Apple Metal (MPS) acceleration!")
+            elif torch.cuda.is_available():
+                # 适配 NVIDIA 显卡
+                device = "cuda"
+                logger.info("🚀 [KB] Using CUDA acceleration!")
+            else:
+                # 兜底 CPU
+                device = "cpu"
+                logger.info("🐢 [KB] No GPU detected. Using CPU.")
+
+            # 3. 初始化 Embedding 模型
+            # 设置 HF 镜像，防止国内网络下载模型超时
             os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+
             self.embeddings = HuggingFaceEmbeddings(
                 model_name="BAAI/bge-small-zh-v1.5",
-                model_kwargs={'device': 'cpu'},
+                # 关键修改：将 device 设置为检测到的硬件，而不是写死 'cpu'
+                model_kwargs={'device': device},
                 encode_kwargs={'normalize_embeddings': True}
             )
 
-            # 2. 加载 FAISS
+            # 4. 加载 FAISS 向量库
             if os.path.exists(DB_PATH):
                 self.vector_store = FAISS.load_local(
                     DB_PATH,
                     self.embeddings,
                     allow_dangerous_deserialization=True
                 )
-                logger.success("✅ [KB] Vector Store loaded successfully.")
+                logger.success(f"✅ [KB] Vector Store loaded successfully from: {DB_PATH}")
             else:
-                logger.warning(f"⚠️ [KB] Index not found at {DB_PATH}. RAG disabled.")
+                logger.warning(f"⚠️ [KB] Index not found at {DB_PATH}. RAG functionality disabled.")
                 self.vector_store = None
+
         except Exception as e:
             logger.error(f"❌ [KB] Init failed: {e}")
             self.vector_store = None
 
-    async def search(self, query: str, top_k: int = 3) -> Dict[str, str]:
+    async def search(self, query: str, top_k: int = 3) -> dict[str, Union[str, list[Any]]]:
         """
         检索相关文档
-        返回格式: {"context": "文档内容...", "sources": ["文章A.md", "文章B.md"]}
+        返回格式: {"context": "拼接好的文档内容...", "sources": ["文章A.md", "文章B.md"]}
         """
         if not self.vector_store:
             return {"context": "", "sources": []}
 
         try:
-            # 异步执行搜索 (FAISS 本身是 CPU 密集型，但在 Web 服务中很快)
-            # 这里简单用同步调用，因为 FAISS 在内存中极快
+            # 异步执行搜索
+            # 注意：FAISS 索引搜索是在 CPU 上进行的，但在 Web 服务中非常快
+            # Embedding 的生成（将 query 转为向量）会使用上面配置的 device (MPS/GPU)
             docs = self.vector_store.similarity_search(query, k=top_k)
 
             if not docs:
@@ -67,8 +89,10 @@ class BlogKnowledgeBase:
             sources = set()
 
             for doc in docs:
+                # 获取元数据中的来源文件名，默认为"未知来源"
                 source = doc.metadata.get("source", "未知来源")
                 sources.add(source)
+                # 格式化文档内容
                 context_parts.append(f"---[引用自: {source}]---\n{doc.page_content}")
 
             return {
@@ -80,5 +104,5 @@ class BlogKnowledgeBase:
             return {"context": "", "sources": []}
 
 
-# 导出单例
+# 导出单例实例
 kb_engine = BlogKnowledgeBase()

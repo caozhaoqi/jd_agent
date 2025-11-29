@@ -33,6 +33,8 @@ class InterviewReport(BaseModel):
     # <--- 核心修改：加上 Optional[...] = None，允许该字段为空
     system_design_question: Optional[InterviewQuestion] = None
 
+    # ✅ 新增这个字段：公司背景分析结果
+    company_analysis: Optional[str] = Field(None, description="公司背景调研总结")
 
     # 🔴 新增字段：参考来源
     reference_sources: List[str] = Field(default=[], description="参考的博客文章列表")
