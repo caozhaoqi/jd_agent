@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -7,6 +7,8 @@ from langchain_core.output_parsers import StrOutputParser
 from app.schemas.interview import JDRequest, InterviewReport
 from app.services.interview_service import generate_interview_guide
 from app.core.llm_factory import get_llm
+from app.services.memory_service import update_long_term_memory
+from app.services.mock_service import run_mock_interview_stream
 
 # 1. 核心修复：实例化 APIRouter
 router = APIRouter()
@@ -33,6 +35,62 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: Session
     if user is None:
         raise HTTPException(status_code=401, detail="用户不存在")
     return user
+
+
+from fastapi import UploadFile, File  # 新增
+from app.utils.file_parser import parse_resume_file
+from app.chains.resume_extractor import extract_resume_features
+from app.core.models import UserProfile  # 确保导入模型
+
+
+# 新增：简历上传与解析接口
+@router.post("/upload-resume")
+async def upload_resume(
+        file: UploadFile = File(...),
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_session)
+):
+    """
+    上传简历 -> 解析文本 -> LLM提取画像 -> 存入长期记忆
+    """
+    # 1. 解析文件
+    resume_text = await parse_resume_file(file)
+
+    # 2. 调用 LLM 提取关键信息
+    facts = await extract_resume_features(resume_text)
+
+    if not facts:
+        return {"msg": "简历解析完成，但未提取到有效信息", "count": 0}
+
+    # 3. 存入数据库 (UserProfile)
+    # 策略：先清除该用户旧的简历相关 tag (可选)，或者直接追加
+    # 这里我们选择追加，但在前端可以展示
+    count = 0
+    for fact in facts:
+        # 查重：避免重复写入完全一样的信息
+        exists = db.exec(
+            select(UserProfile)
+            .where(UserProfile.user_id == user.id)
+            .where(UserProfile.content == fact.content)
+        ).first()
+
+        if not exists:
+            new_profile = UserProfile(
+                user_id=user.id,
+                category=f"resume_{fact.category}",  # 标记来源为简历
+                content=fact.content
+            )
+            db.add(new_profile)
+            count += 1
+
+    db.commit()
+
+    return {
+        "msg": "简历解析成功！已更新个人画像。",
+        "extracted_facts": [f.content for f in facts],
+        "new_entries": count
+    }
+
 
 # --- Auth 接口 ---
 class AuthRequest(BaseModel):
@@ -76,16 +134,20 @@ def get_messages(session_id: int, user: User = Depends(get_current_user), sessio
 @router.post("/generate-guide", response_model=InterviewReport)
 async def create_guide(
         request: JDRequest,
+
+        background_tasks: BackgroundTasks,
+
         # 1. 注入当前登录用户 (必须登录才能存历史)
         user: User = Depends(get_current_user),
+
         # 2. 注入数据库会话
-        db: Session = Depends(get_session)
+        db: Session = Depends(get_session),
 ):
     """
     接收 JD 文本，返回完整的面试准备指南，并自动保存到历史记录。
     """
     # A. 调用业务逻辑生成报告
-    report = await generate_interview_guide(request)
+    report = await generate_interview_guide(request, db, user.id)
 
     # B. --- 数据库存盘逻辑 (新增) ---
     try:
@@ -128,6 +190,9 @@ async def create_guide(
         # 注意：这里我们只打印错误，不抛出异常，避免因为存库失败导致前端收不到分析结果
         # db.rollback()
 
+    chat_content = f"User上传了JD: {request.jd_text}"
+    background_tasks.add_task(update_long_term_memory, db, user.id, chat_content)
+
     return report
 
 
@@ -165,5 +230,16 @@ async def stream_system_design(tech_stack: str, topic: str):
     # 返回流式响应
     return StreamingResponse(
         generate_stream(),
+        media_type="text/event-stream"
+    )
+
+# 新增：模拟面试接口
+@router.post("/stream/mock-interview")
+async def stream_mock_interview(request: JDRequest):
+    """
+    开启一场 AI 互博的模拟面试
+    """
+    return StreamingResponse(
+        run_mock_interview_stream(request.jd_text, rounds=3),
         media_type="text/event-stream"
     )

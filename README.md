@@ -55,6 +55,12 @@ python query_blog.py
 
 ```
 
+- pdf parser
+
+```shell
+pip install python-multipart pdfplumber python-docx
+```
+
 - web
 
 ```shell

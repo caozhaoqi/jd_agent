@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"; // 路由跳转
 import ReactMarkdown from "react-markdown";
 import {
   Send, Bot, User, Plus, MessageSquare,
-  Loader2, Paperclip, LogOut, History
+  Loader2, Paperclip, LogOut
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -66,9 +66,21 @@ export default function Home() {
     const scrollToBottom = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
+    // 延时 100ms，等待 React 渲染和 CSS 布局完成
     const timeoutId = setTimeout(scrollToBottom, 100);
     return () => clearTimeout(timeoutId);
   }, [messages, isLoading]);
+
+  // --- 日志辅助函数 ---
+  const logEvent = (stage: string, message: any, type: 'info' | 'error' | 'success' = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const styles = {
+      info: 'color: #3b82f6; font-weight: bold;',
+      success: 'color: #10b981; font-weight: bold;',
+      error: 'color: #ef4444; font-weight: bold;',
+    };
+    console.log(`%c[${timestamp}] [${stage}]`, styles[type], message);
+  };
 
   // --- API: 获取历史会话列表 ---
   const fetchSessions = async (token: string) => {
@@ -101,24 +113,23 @@ export default function Home() {
       if (res.ok) {
         const msgs = await res.json();
 
-        // 🔴 核心修改：处理历史数据的格式
+        // 🔴 核心修复：处理数据库存的 JSON 字符串
         const formattedMsgs = msgs.map((m: any) => {
           let content = m.content;
           let isJson = false;
 
-          // 如果是 AI 的回复，且内容看起来像 JSON，尝试解析并转 Markdown
+          // 如果是 AI 的回复，尝试解析 JSON 并转 Markdown
           if (m.role === "assistant") {
             try {
-              // 尝试把数据库里的字符串转回 JSON 对象
+              // 数据库里存的是 model_dump_json() 生成的字符串，需要 parse
               const jsonData = JSON.parse(m.content);
-              // 如果解析成功，且包含 meta 字段，说明是我们的报告
-              if (jsonData.meta) {
+              // 检查是否包含 meta 字段，确认是我们的报告格式
+              if (jsonData && jsonData.meta) {
                 content = formatReportToMarkdown(jsonData);
                 isJson = true;
               }
             } catch (e) {
               // 解析失败说明是普通文本（比如之前的测试数据），保持原样
-              console.log("解析历史 JSON 失败，按普通文本显示");
             }
           }
 
@@ -169,19 +180,31 @@ export default function Home() {
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
     setIsLoading(true);
 
+    logEvent('API_START', { url: '/api/v1/generate-guide', payload: userMsg }, 'info');
+
     try {
+      const startTime = performance.now();
+
       const response = await fetch("http://127.0.0.1:8000/api/v1/generate-guide", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}` // 🔴 必须带 Token
+            "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({ jd_text: userMsg }),
       });
 
-      if (!response.ok) throw new Error("API 请求失败");
+      const endTime = performance.now();
+      const duration = (endTime - startTime).toFixed(0);
+
+      if (!response.ok) {
+        logEvent('API_ERROR', `Status: ${response.status} | Time: ${duration}ms`, 'error');
+        throw new Error("API 请求失败");
+      }
 
       const data = await response.json();
+      logEvent('API_SUCCESS', { duration: `${duration}ms` }, 'success');
+
       const markdownReport = formatReportToMarkdown(data);
 
       setMessages((prev) => [
@@ -189,7 +212,7 @@ export default function Home() {
         { role: "assistant", content: markdownReport, isJson: true },
       ]);
 
-      // 发送成功后，刷新一下侧边栏历史 (如果后端实现了自动保存 Session)
+      // 发送成功后，刷新侧边栏历史
       fetchSessions(token);
 
     } catch (error) {
@@ -197,17 +220,18 @@ export default function Home() {
         ...prev,
         { role: "assistant", content: "❌ 生成失败。请检查后端服务或 Token 是否过期。" },
       ]);
+      logEvent('EXCEPTION', error, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
+    // 🔴 布局修复 1: fixed inset-0 锁死高度
     <div className="fixed inset-0 flex bg-[#f9fafb] text-gray-800 font-sans">
 
       {/* --- 左侧侧边栏 --- */}
       <div className="w-[260px] bg-[#fcfdfd] border-r border-gray-200 hidden md:flex flex-col h-full transition-all">
-        {/* 新建对话按钮 */}
         <div className="p-4">
           <button
             onClick={handleNewChat}
@@ -217,10 +241,8 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 历史记录列表 */}
         <div className="flex-1 overflow-y-auto px-2 scrollbar-thin">
           <div className="text-xs text-gray-400 px-3 py-2 font-medium">最近记录</div>
-
           {sessions.length === 0 ? (
             <div className="text-xs text-gray-400 px-3 text-center mt-4">暂无历史记录</div>
           ) : (
@@ -242,7 +264,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* 底部用户栏 */}
         <div className="p-4 border-t border-gray-100">
            <div className="flex items-center justify-between text-sm text-gray-600">
              <div className="flex items-center gap-2 overflow-hidden">
@@ -254,11 +275,7 @@ export default function Home() {
                     <span className="text-xs text-gray-400">Pro Plan</span>
                 </div>
              </div>
-             <button
-                onClick={handleLogout}
-                className="hover:bg-red-50 hover:text-red-500 p-2 rounded-md transition-colors"
-                title="退出登录"
-             >
+             <button onClick={handleLogout} className="hover:bg-red-50 hover:text-red-500 p-2 rounded-md transition-colors" title="退出登录">
                 <LogOut size={16} />
              </button>
            </div>
@@ -268,7 +285,7 @@ export default function Home() {
       {/* --- 右侧主聊天区 --- */}
       <div className="flex-1 flex flex-col h-full relative bg-white">
 
-        {/* 顶部标题 (移动端) */}
+        {/* 顶部标题 */}
         <div className="md:hidden h-14 border-b flex-shrink-0 flex items-center px-4 justify-between bg-white z-20">
           <span className="font-semibold text-gray-800">JD Agent</span>
           <div className="flex gap-3">
@@ -278,11 +295,11 @@ export default function Home() {
         </div>
 
         {/* 消息列表 */}
+        {/* 🔴 布局修复 2: pb-[200px] 留出底部空间 */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-[200px] scroll-smooth">
           <div className="max-w-3xl mx-auto space-y-8">
             {messages.map((msg, idx) => (
               <div key={idx} className={clsx("flex gap-4", msg.role === "user" ? "flex-row-reverse" : "")}>
-                {/* 头像 */}
                 <div className={clsx(
                   "w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center shadow-sm",
                   msg.role === "assistant" ? "bg-white border border-gray-200 text-blue-600" : "bg-gray-800 text-white"
@@ -290,7 +307,6 @@ export default function Home() {
                   {msg.role === "assistant" ? <Bot size={18} /> : <User size={18} />}
                 </div>
 
-                {/* 气泡内容 */}
                 <div className={clsx(
                   "relative max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm border",
                   msg.role === "user"
@@ -308,7 +324,6 @@ export default function Home() {
               </div>
             ))}
 
-            {/* Loading 状态 */}
             {isLoading && (
               <div className="flex gap-4">
                 <div className="w-8 h-8 rounded-full bg-white border border-gray-200 text-blue-600 flex items-center justify-center shadow-sm">
@@ -321,6 +336,7 @@ export default function Home() {
               </div>
             )}
 
+            {/* 🔴 布局修复 3: 底部垫片 */}
             <div className="h-20 flex-shrink-0" />
             <div ref={messagesEndRef} />
           </div>
@@ -372,7 +388,7 @@ export default function Home() {
   );
 }
 
-// --- Markdown 格式化函数 (包含 RAG 引用) ---
+// --- Markdown 格式化函数 ---
 function formatReportToMarkdown(data: any) {
   const { meta, tech_questions, hr_questions, system_design_question, reference_sources } = data;
 
