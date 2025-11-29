@@ -247,3 +247,80 @@ async def stream_mock_interview(request: JDRequest):
         run_mock_interview_stream(request.jd_text, rounds=3),
         media_type="text/event-stream"
     )
+
+
+class ChatRequest(BaseModel):
+    session_id: int
+    content: str
+
+
+@router.post("/chat/stream")
+async def stream_chat(
+        req: ChatRequest,
+        db: Session = Depends(get_session)
+):
+    """
+    通用多轮对话流式接口 (支持模拟面试后续的追问)
+    """
+    # 1. 验证会话
+    session = db.get(ChatSession, req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    # 2. 保存用户的新回复到数据库
+    user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.content)
+    db.add(user_msg)
+    db.commit()
+
+    # 3. 准备历史上下文 (Context)
+    # 取最近 10 条记录，防止 Token 爆炸
+    recent_msgs = session.messages[-10:]
+
+    # 4. 构建 Prompt
+    # 如果是模拟面试模式，系统提示词需要保持“面试官”人设
+    # 这里做一个简单的判断：如果标题包含"面试"，就加强面试官人设
+    system_prompt = "你是一个很有帮助的 AI 助手。"
+    if "面试" in session.title:
+        system_prompt = "你是一名严厉但专业的面试官。请根据求职者的回答进行追问，考察其技术深度。每次只问一个问题。"
+
+    # LangChain 消息构建
+    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+    lc_messages = [SystemMessage(content=system_prompt)]
+
+    for m in recent_msgs:
+        if m.role == "user":
+            lc_messages.append(HumanMessage(content=m.content))
+        else:
+            lc_messages.append(AIMessage(content=m.content))
+
+    # 5. 调用 LLM
+    llm = get_llm(temperature=0.7, streaming=True)
+    chain = llm | StrOutputParser()
+
+    # 6. 流式生成并(暂存)用于后续保存
+    # 注意：在流式响应中保存 AI 回复到数据库比较复杂，
+    # 简单做法是前端接收完后再调个 API 保存，或者由 BackgroundTask 聚合。
+    # 这里为了演示流畅性，我们先只做流式输出，AI 回复的“入库”逻辑略过，
+    # 或者你可以使用一个回调函数在生成结束后保存。
+
+    async def generate_and_stream():
+        full_response = ""
+        async for chunk in chain.astream(lc_messages):
+            full_response += chunk
+            yield f"data: {chunk}\n\n"
+
+        # 流结束后，保存 AI 回复到数据库 (补全记录)
+        # 注意：这里在生成器里操作 DB 需要小心 Session 作用域，简单场景下直接用即可
+        try:
+            ai_msg = ChatMessage(session_id=req.session_id, role="assistant", content=full_response)
+            db.add(ai_msg)
+            db.commit()
+        except Exception as e:
+            print(f"Error saving AI response: {e}")
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate_and_stream(),
+        media_type="text/event-stream"
+    )
