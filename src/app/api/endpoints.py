@@ -335,32 +335,21 @@ from fastapi.responses import Response
 
 
 @router.post("/audio/transcribe")
-async def transcribe_audio(
-        file: UploadFile = File(...)
-):
-    """
-    ASR: 语音转文字 (使用 Whisper)
-    """
-    # 1. 实例化 OpenAI 客户端 (专门用于音频)
-    # 注意：这里建议使用 OpenAI 官方或者支持 Whisper 的中转商
-    from openai import OpenAI
+async def transcribe_audio(file: UploadFile = File(...)):
     from app.core.config import settings
+    from openai import OpenAI
 
+    # 使用 Audio 专用配置
     client = OpenAI(
-        api_key=settings.OPENAI_API_KEY,
-        base_url=settings.OPENAI_API_BASE
+        api_key=settings.effective_audio_key,
+        base_url=settings.effective_audio_base
     )
 
-    # 2. 读取上传的音频文件
-    # Whisper API 需要文件对象
     file_content = await file.read()
 
-    # 3. 调用 Whisper 模型
-    # 注意：如果用 DeepSeek，它暂时不支持 Audio，这里需要一个支持 Audio 的 Key
-    # 或者你可以硬编码一个专门用于 Audio 的 Client
     try:
         transcript = client.audio.transcriptions.create(
-            model="whisper-1",
+            model=settings.ASR_MODEL,  # 使用配置的模型名
             file=(file.filename, file_content, file.content_type)
         )
         return {"text": transcript.text}

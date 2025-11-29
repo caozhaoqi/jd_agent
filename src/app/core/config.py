@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     LANGCHAIN_API_KEY: Optional[str] = None
     LANGCHAIN_PROJECT: str = "interview-agent-dev"
 
+    AUDIO_API_KEY: Optional[str] = None
+    AUDIO_API_BASE: Optional[str] = None
+    ASR_MODEL: str = "whisper-1"
+    TTS_MODEL: str = "tts-1"
+
+    @property
+    def effective_audio_key(self):
+        return self.AUDIO_API_KEY or self.OPENAI_API_KEY
+
+    @property
+    def effective_audio_base(self):
+        return self.AUDIO_API_BASE or self.OPENAI_API_BASE
+
     # --- Pydantic 配置 ---
     model_config = SettingsConfigDict(
         env_file=ENV_PATH,  # 指定读取的文件名
