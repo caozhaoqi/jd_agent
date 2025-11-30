@@ -11,11 +11,10 @@ import MessageList from "@/components/MessageList";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
 import { Message, Session, ChatMode } from "@/types/chat";
 
-// 2. 🔴 关键修复：动态导入 ChatInput 并禁用 SSR
-// 这会防止 Next.js 在服务端尝试执行包含 Worker 的代码
+// 2. 动态导入 ChatInput (禁用 SSR)
+// 这是解决 Worker 报错的唯一方法，确保录音库只在浏览器加载
 const ChatInput = dynamic(() => import("@/components/ChatInput"), {
   ssr: false,
-  // 加载过程中的占位符，防止页面抖动
   loading: () => (
     <div className="p-4 border-t border-gray-100 bg-white">
       <div className="max-w-3xl mx-auto bg-gray-50 border border-gray-200 rounded-2xl h-[80px] animate-pulse flex items-center justify-center text-gray-400 text-sm">
@@ -132,6 +131,7 @@ export default function Home() {
   };
 
   // --- 交互: 语音上传 (ASR) ---
+  // 这里只负责接收 Blob 并上传，不负责录音过程
   const handleAudioUpload = async (blob: Blob) => {
       setIsLoading(true);
       const formData = new FormData();
@@ -153,7 +153,6 @@ export default function Home() {
           alert("语音识别失败");
           setIsLoading(false);
       }
-      // 注意：不要在这里 setIsLoading(false)，因为 handleSend 会接管 loading 状态
   };
 
   // --- 交互: 核心发送逻辑 ---
@@ -294,7 +293,7 @@ export default function Home() {
         {/* 引用子组件: 消息列表 */}
         <MessageList messages={messages} isLoading={isLoading} />
 
-        {/* 引用子组件: 底部输入区 (动态加载) */}
+        {/* 引用子组件: 底部输入区 */}
         <ChatInput
           mode={mode}
           isLoading={isLoading}

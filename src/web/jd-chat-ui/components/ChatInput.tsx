@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 import { Send, Mic, Paperclip } from "lucide-react";
@@ -15,6 +17,7 @@ export default function ChatInput({ mode, isLoading, onSend, onFileUpload, onAud
   const [input, setInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ✅ 录音逻辑只能在这里，且此组件被 page.tsx 动态导入(ssr:false)
   const { startRecording, stopRecording, status: recordingStatus } = useReactMediaRecorder({
     audio: true,
     onStop: (blobUrl, blob) => onAudioUpload(blob)
