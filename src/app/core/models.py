@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
+from pydantic import BaseModel
 
 Base = declarative_base()
 
@@ -55,3 +56,15 @@ class InterviewRecord(Base):
 
     def __repr__(self):
         return f"<Record {self.company_name}>"
+
+class ChatRequest(BaseModel):
+    session_id: int
+    content: str
+
+
+# ==========================================
+# 1. 认证接口 (Auth)
+# ==========================================
+class AuthRequest(BaseModel):
+    username: str
+    password: str

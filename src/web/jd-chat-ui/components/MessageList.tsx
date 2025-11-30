@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { Bot, User, Loader2, Play } from "lucide-react"; // 🟢 引入 Play 图标
 import clsx from "clsx";
 import { Message } from "@/types/chat";
+import ThinkingBlock from "./ThinkingBlock"; // 导入组件
 
 interface MessageListProps {
   messages: Message[];
@@ -37,11 +38,21 @@ export default function MessageList({
 
             {/* 气泡 */}
             <div className={clsx("max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-7 shadow-sm border", msg.role === "user" ? "bg-blue-50 border-blue-100" : "bg-white border-gray-100")}>
-              {msg.role === "assistant" ? (
-                <div className="prose prose-sm max-w-none prose-headings:text-gray-800 prose-p:text-gray-600 prose-li:text-gray-600">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
-              ) : msg.content}
+                {msg.role === "assistant" ? (
+                  <div className="prose prose-sm max-w-none ...">
+
+                    {/* ✅ 渲染思考过程 */}
+                    {/* 只要有思考步骤，或者内容还没生成完，就显示 */}
+                    {(msg.thoughts?.length || 0) > 0 && (
+                        <ThinkingBlock
+                            thoughts={msg.thoughts || []}
+                            isFinished={msg.content.length > 5} // 简单判断：如果正文开始输出了，就认为思考结束
+                        />
+                    )}
+
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                ) : msg.content}
             </div>
           </div>
         ))}

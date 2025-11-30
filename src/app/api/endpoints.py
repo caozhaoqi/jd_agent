@@ -10,11 +10,15 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+import json  # 记得导入 json
+# 确保导入了必要的工具
+from app.core.stream_manager import init_stream_queue
+
 
 # --- 内部模块导入 ---
 # 1. 数据库与鉴权
 from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
-from app.core.models import User, ChatSession, ChatMessage, UserProfile
+from app.core.models import User, ChatSession, ChatMessage, UserProfile, ChatRequest, AuthRequest
 from app.core.stream_manager import init_stream_queue
 from app.graph.workflow import app_graph
 
@@ -57,14 +61,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: Session
     if user is None:
         raise HTTPException(status_code=401, detail="用户不存在")
     return user
-
-
-# ==========================================
-# 1. 认证接口 (Auth)
-# ==========================================
-class AuthRequest(BaseModel):
-    username: str
-    password: str
 
 
 @router.post("/register")
@@ -232,10 +228,6 @@ async def stream_mock_interview(request: JDRequest):
     )
 
 
-class ChatRequest(BaseModel):
-    session_id: int
-    content: str
-
 
 @router.post("/chat/stream")
 async def stream_chat(
@@ -243,8 +235,11 @@ async def stream_chat(
         db: Session = Depends(get_session)
 ):
     """
-    通用多轮对话流式接口 (支持模拟面试后续的追问)
+    通用多轮对话流式接口 (适配 DeepSeek 思考 UI)
     """
+    # 初始化队列 (虽然简单对话主要靠流，但保持习惯初始化 ContextVar)
+    init_stream_queue()
+
     # 1. 验证会话
     session = db.get(ChatSession, req.session_id)
     if not session:
@@ -255,18 +250,13 @@ async def stream_chat(
     db.add(user_msg)
     db.commit()
 
-    # 3. 准备历史上下文 (Context)
-    # 取最近 10 条记录，防止 Token 爆炸
+    # 3. 准备历史上下文
     recent_msgs = session.messages[-10:]
 
-    # 4. 构建 Prompt
-    # 如果是模拟面试模式，系统提示词需要保持“面试官”人设
-    # 这里做一个简单的判断：如果标题包含"面试"，就加强面试官人设
+    # 4. 构建 Prompt (人设切换逻辑保持不变)
     last_user_msg = req.content
-
     system_prompt = "你是一个专业的 AI 求职助手，负责解答用户的技术问题。"
 
-    # 如果用户触发了开始面试的关键词
     if "模拟面试" in last_user_msg or "开始面试" in last_user_msg:
         system_prompt = """
             你现在是【面试官模式】。
@@ -277,7 +267,6 @@ async def stream_chat(
             3. 等待用户回答后，再进行追问或点评。
             """
     elif "面试" in session.title:
-        # 如果已经在面试会话中，保持严厉
         system_prompt = "你是一名严厉但专业的面试官。请根据求职者的回答进行追问，考察其技术深度。"
 
     # LangChain 消息构建
@@ -294,34 +283,51 @@ async def stream_chat(
     llm = get_llm(temperature=0.7, streaming=True)
     chain = llm | StrOutputParser()
 
-    # 6. 流式生成并(暂存)用于后续保存
-    # 注意：在流式响应中保存 AI 回复到数据库比较复杂，
-    # 简单做法是前端接收完后再调个 API 保存，或者由 BackgroundTask 聚合。
-    # 这里为了演示流畅性，我们先只做流式输出，AI 回复的“入库”逻辑略过，
-    # 或者你可以使用一个回调函数在生成结束后保存。
-
+    # 6. 流式生成 (升级版：支持 JSON 事件流)
     async def generate_and_stream():
+        # --- A. 发送思考过程 (Thought) ---
+        # 即使是普通对话，发送一个思考状态也能让 UI 看起来更高级，且保持格式一致
+        thought_payload = json.dumps({
+            "type": "thought",
+            "content": "正在分析上下文与面试意图..."
+        }, ensure_ascii=False)
+        yield f"data: {thought_payload}\n\n"
+
+        # 稍微停顿一下让用户看到思考动画 (可选)
+        await asyncio.sleep(0.5)
+
+        # --- B. 发送内容流 (Token) ---
         full_response = ""
-        async for chunk in chain.astream(lc_messages):
-            full_response += chunk
-            yield f"data: {chunk}\n\n"
-
-        # 流结束后，保存 AI 回复到数据库 (补全记录)
-        # 注意：这里在生成器里操作 DB 需要小心 Session 作用域，简单场景下直接用即可
         try:
-            ai_msg = ChatMessage(session_id=req.session_id, role="assistant", content=full_response)
-            db.add(ai_msg)
-            db.commit()
+            async for chunk in chain.astream(lc_messages):
+                full_response += chunk
+                # ✅ 关键修改：包装为 JSON 格式，匹配前端 readStream 的解析逻辑
+                token_payload = json.dumps({
+                    "type": "token",
+                    "content": chunk
+                }, ensure_ascii=False)
+                yield f"data: {token_payload}\n\n"
         except Exception as e:
-            logger.debug(f"Error saving AI response: {e}")
+            # 发送错误信息
+            err_payload = json.dumps({"type": "token", "content": f"\n[Error]: {str(e)}"})
+            yield f"data: {err_payload}\n\n"
 
+        # --- C. 存库逻辑 ---
+        try:
+            if full_response:
+                ai_msg = ChatMessage(session_id=req.session_id, role="assistant", content=full_response)
+                db.add(ai_msg)
+                db.commit()
+        except Exception as e:
+            print(f"Error saving AI response: {e}")
+
+        # --- D. 结束 ---
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate_and_stream(),
         media_type="text/event-stream"
     )
-
 
 
 # ==========================================

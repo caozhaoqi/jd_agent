@@ -1,30 +1,42 @@
 import asyncio
 from contextvars import ContextVar
-from typing import Optional
+from typing import Optional, Dict, Any
 
-# 定义一个上下文变量，用来存储当前请求的队列
-# 每个请求进来都会有一个独立的 Queue，互不冲突
+# 定义上下文变量，确保并发请求互不干扰
 _msg_queue: ContextVar[Optional[asyncio.Queue]] = ContextVar("msg_queue", default=None)
 
 def init_stream_queue():
-    """初始化当前请求的队列"""
+    """在请求开始时初始化队列"""
     q = asyncio.Queue()
     _msg_queue.set(q)
     return q
 
 def get_stream_queue() -> Optional[asyncio.Queue]:
-    """获取当前请求的队列"""
     return _msg_queue.get()
 
-async def send_thought(step: str, detail: str = ""):
+async def send_thought(step_title: str, detail: str = ""):
     """
-    节点调用的发送函数 (替代 logger.debug)
+    各 Agent 节点调用此函数发送思考过程
     """
     q = get_stream_queue()
     if q:
-        # 构造前端 ThinkingBlock 需要的数据格式
-        data = {
+        await q.put({
             "type": "thought",
-            "content": f"{step} {detail}".strip()
-        }
-        await q.put(data)
+            "content": step_title,
+            "detail": detail
+        })
+
+async def send_token(text: str):
+    """发送最终生成的 Token"""
+    q = get_stream_queue()
+    if q:
+        await q.put({
+            "type": "token",
+            "content": text
+        })
+
+async def send_done():
+    """发送结束信号"""
+    q = get_stream_queue()
+    if q:
+        await q.put(None) # None 代表结束

@@ -180,18 +180,38 @@ export default function Home() {
                       const lastIndex = newMsgs.length - 1;
                       const lastMsg = newMsgs[lastIndex];
                       if (lastMsg.role === "assistant") {
-                          newMsgs[lastIndex] = { ...lastMsg, content: lastMsg.content + textToShow };
-                      }
+                            // 🅰️ 思考流
+                            if (payload.type === 'thought') {
+                                const currentThoughts = lastMsg.thoughts || [];
+                                // 简单去重，或者直接追加
+                                if (currentThoughts[currentThoughts.length-1] !== payload.content) {
+                                    newMsgs[lastIndex] = {
+                                        ...lastMsg,
+                                        thoughts: [...currentThoughts, payload.content]
+                                    };
+                                }
+                            }
+                            // 🅱️ 内容流
+                            else if (payload.type === 'token' || payload.type === 'result') {
+                                // 如果是 result (全量JSON)，可以特殊处理，这里假设是 token 累加
+                                const newContent = payload.content || "";
+                                newMsgs[lastIndex] = {
+                                    ...lastMsg,
+                                    content: lastMsg.content + newContent
+                                };
+                            }
+                        }
                       return newMsgs;
                   });
 
-                  // TTS
-                  if (enableTTS) {
+                  // 🔊 TTS 仅处理 token 类型
+                  if (enableTTS && (payload.type === 'token')) {
                       bufferText += textToShow;
                       if (/[。！？\.\!\?\:\n]/.test(textToShow)) {
                           addToQueue(bufferText);
                           bufferText = "";
                       }
+                      bufferTTS(payload.content)
                   }
               }
           }
