@@ -98,3 +98,9 @@ python ./src/run/main_process.py
 ```shell
 npm install react-media-recorder
 ```
+
+- langgraph
+
+```shell
+pip install langgraph langchain-openai
+```

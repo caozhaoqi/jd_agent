@@ -1,4 +1,6 @@
 from flask import Flask, request, Response, stream_with_context
+from loguru import logger
+
 from app.core.rag_engine import rag_engine
 import json
 import time
@@ -20,7 +22,7 @@ def analyze_jd_flask():
 
     # 1. 演示 RAG：先从向量库找有没有类似的历史经验
     related_info = rag_engine.search(query=jd_text, top_k=1)
-    print(f"RAG 检索结果: {related_info}")
+    logger.debug(f"RAG 检索结果: {related_info}")
 
     # 2. 演示 SSE (服务器推送事件)
     @stream_with_context

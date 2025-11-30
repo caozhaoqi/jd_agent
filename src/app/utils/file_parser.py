@@ -3,6 +3,8 @@ import docx
 from fastapi import UploadFile, HTTPException
 import io
 
+from loguru import logger
+
 
 async def parse_resume_file(file: UploadFile) -> str:
     """
@@ -41,5 +43,5 @@ async def parse_resume_file(file: UploadFile) -> str:
         return content_text
 
     except Exception as e:
-        print(f"❌ 解析文件失败: {e}")
+        logger.debug(f"❌ 解析文件失败: {e}")
         raise HTTPException(status_code=500, detail=f"文件解析失败: {str(e)}")

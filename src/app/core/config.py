@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
+from loguru import logger
 import os
 
 current_file_dir = os.path.dirname(os.path.abspath(__file__))
@@ -10,7 +10,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir)
 # 拼接 .env 路径
 ENV_PATH = os.path.join(project_root, ".env")
 
-print(f"🔧 [Config] Loading .env from: {ENV_PATH}")
+logger.debug(f"🔧 [Config] Loading .env from: {ENV_PATH}")
 
 class Settings(BaseSettings):
     """

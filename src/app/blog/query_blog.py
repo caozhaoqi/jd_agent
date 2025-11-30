@@ -1,6 +1,7 @@
 import os
 import sys
 from dotenv import load_dotenv
+from loguru import logger
 
 # ==========================================
 # 🔴 核心修复：强制加载项目根目录的 .env 文件
@@ -14,9 +15,9 @@ env_path = os.path.join(project_root, ".env")
 # 1. 加载环境变量
 if os.path.exists(env_path):
     load_dotenv(env_path)
-    print(f"✅ 已加载环境变量: {env_path}")
+    logger.debug(f"✅ 已加载环境变量: {env_path}")
 else:
-    print(f"❌ 警告: 未找到 .env 文件，路径: {env_path}")
+    logger.debug(f"❌ 警告: 未找到 .env 文件，路径: {env_path}")
 
 # 2. 将 src 目录加入 Python 搜索路径，防止 'ModuleNotFoundError: No module named app'
 src_path = os.path.join(project_root, "src")
@@ -38,7 +39,7 @@ DB_LOAD_PATH = "../../../blog_faiss_index"
 
 def query_blog_knowledge(question: str):
     # 1. 初始化 Embedding 模型 (使用新版)
-    print("⏳ 正在加载 BGE 模型...")
+    logger.debug("⏳ 正在加载 BGE 模型...")
     embedding_model = HuggingFaceEmbeddings(
         model_name="BAAI/bge-small-zh-v1.5",
         model_kwargs={'device': 'cpu'},
@@ -56,7 +57,7 @@ def query_blog_knowledge(question: str):
         return f"❌ 找不到知识库目录 '{DB_LOAD_PATH}'。\n请先确保你运行了 build_blog_kb.py 并且生成了索引文件。\n错误详情: {e}"
 
     # 2. 检索 (Retrieve)
-    print(f"🔍 正在检索问题: {question}")
+    logger.debug(f"🔍 正在检索问题: {question}")
     docs = vector_store.similarity_search(question, k=3)
 
     if not docs:
@@ -83,7 +84,7 @@ def query_blog_knowledge(question: str):
 
     chain = prompt | llm | StrOutputParser()
 
-    print(f"📄 参考文章: {[d.metadata.get('source') for d in docs]}")
+    logger.debug(f"📄 参考文章: {[d.metadata.get('source') for d in docs]}")
 
     response = chain.invoke({"context": context, "question": question})
     return response
@@ -92,10 +93,10 @@ def query_blog_knowledge(question: str):
 if __name__ == "__main__":
     # 交互式查询
     while True:
-        print("\n" + "=" * 30)
+        logger.debug("\n" + "=" * 30)
         q = input("请输入你想查询博客的问题 (输入 q 退出): ")
         if q.lower() in ['q', 'quit', 'exit']:
             break
 
         answer = query_blog_knowledge(q)
-        print("\n🤖 AI 回答:\n", answer)
+        logger.debug("\n🤖 AI 回答:\n", answer)

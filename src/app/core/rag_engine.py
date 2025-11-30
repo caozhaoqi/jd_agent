@@ -4,6 +4,7 @@ from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_community.vectorstores import FAISS
+from loguru import logger
 
 # 1. 定义向量模型 (JD要求: BGE)
 # 第一次运行会自动从 HuggingFace 下载模型，约 100MB
@@ -52,7 +53,7 @@ class RAGEngine:
 
         # 4. 持久化保存
         self.vector_store.save_local(VECTOR_DB_PATH)
-        print(f"✅ 已将 {len(docs)} 个片段存入向量库")
+        logger.debug(f"✅ 已将 {len(docs)} 个片段存入向量库")
 
     def search(self, query: str, top_k: int = 3) -> List[str]:
         """

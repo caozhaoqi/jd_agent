@@ -3,7 +3,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from app.core.llm_factory import get_llm
-
+from loguru import logger
 
 # 定义输出结构 (复用之前的 UserFact 逻辑)
 class UserFact(BaseModel):
@@ -51,5 +51,5 @@ async def extract_resume_features(resume_text: str) -> List[UserFact]:
         })
         return result.facts
     except Exception as e:
-        print(f"❌ Resume extraction failed: {e}")
+        logger.debug(f"❌ Resume extraction failed: {e}")
         return []

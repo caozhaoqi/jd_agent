@@ -3,7 +3,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from app.core.llm_factory import get_llm
-
+from loguru import logger
 
 # 定义输出结构
 class UserFact(BaseModel):
@@ -49,5 +49,5 @@ async def extract_user_profile(chat_history: str) -> List[UserFact]:
         })
         return result.new_facts
     except Exception as e:
-        print(f"❌ Memory extraction failed: {e}")
+        logger.debug(f"❌ Memory extraction failed: {e}")
         return []

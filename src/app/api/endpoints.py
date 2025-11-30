@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer
+from loguru import logger
 from pydantic import BaseModel
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
@@ -12,6 +13,7 @@ from langchain_core.output_parsers import StrOutputParser
 # 1. 数据库与鉴权
 from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from app.core.models import User, ChatSession, ChatMessage, UserProfile
+from app.graph.workflow import app_graph
 
 # 2. Schema 数据模型
 from app.schemas.interview import JDRequest, InterviewReport
@@ -198,10 +200,10 @@ async def create_guide(
         db.add(ai_msg)
 
         db.commit()
-        print(f"✅ [DB] 会话已保存: ID={new_session.id}, Title={title}")
+        logger.debug(f"✅ [DB] 会话已保存: ID={new_session.id}, Title={title}")
 
     except Exception as e:
-        print(f"❌ [DB Error] 保存历史记录失败: {e}")
+        logger.debug(f"❌ [DB Error] 保存历史记录失败: {e}")
         # 不抛出异常，保证前端能收到报告
 
     # C. 后台更新长期记忆
@@ -316,7 +318,7 @@ async def stream_chat(
             db.add(ai_msg)
             db.commit()
         except Exception as e:
-            print(f"Error saving AI response: {e}")
+            logger.debug(f"Error saving AI response: {e}")
 
         yield "data: [DONE]\n\n"
 
@@ -354,7 +356,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
         )
         return {"text": transcript.text}
     except Exception as e:
-        print(f"ASR Error: {e}")
+        logger.debug(f"ASR Error: {e}")
         # 兜底：如果 API 失败，返回空
         return {"text": "", "error": str(e)}
 
@@ -387,3 +389,28 @@ async def text_to_speech(text: str):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# app/api/endpoints.py
+
+@router.post("/agent/feedback")
+async def agent_feedback(thread_id: str, feedback: str, action: str = "retry"):
+    """
+    用户对 AI 暂停的任务进行干预
+    action: "approve" (强制通过) | "retry" (带意见重试)
+    """
+    config = {"configurable": {"thread_id": thread_id}}
+
+    if action == "approve":
+        # 强制更新状态：把分数改成 100，这样路由就会通过
+        app_graph.update_state(config, {"quality_score": 100, "human_feedback": "强制通过"})
+    else:
+        # 注入用户的修改意见
+        app_graph.update_state(config, {"human_feedback": feedback})
+
+    # 恢复执行 (Resume)
+    # 这里的 None 表示继续执行下一步 (即进入 tech_lead 重写)
+    async for event in app_graph.astream(None, config=config):
+        pass
+
+    return {"status": "Resumed"}

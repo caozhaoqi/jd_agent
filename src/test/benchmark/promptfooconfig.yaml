@@ -1,0 +1,10 @@
+prompts: [src/prompts/tech_gen.yaml]
+providers: [openai:gpt-3.5-turbo, openai:gpt-4]
+tests:
+  - vars:
+      tech_stack: "Python, FastAPI"
+      level: "高级"
+    assert:
+      - type: llm-rubric
+        value: "生成的题目必须包含异步编程(Asyncio)相关的问题"
+      - type: is-json

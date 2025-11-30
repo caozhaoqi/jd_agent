@@ -1,3 +1,4 @@
+from loguru import logger
 from sqlmodel import Session, select, delete
 from app.core.models import UserProfile
 from app.chains.memory_extractor import extract_user_profile, UserFact
@@ -31,7 +32,7 @@ async def update_long_term_memory(db: Session, user_id: int, chat_history_str: s
             db.add(new_profile)
 
     db.commit()
-    print(f"🧠 [LTM] Updated {len(facts)} new facts for User {user_id}")
+    logger.debug(f"🧠 [LTM] Updated {len(facts)} new facts for User {user_id}")
 
 
 def get_user_profile_str(db: Session, user_id: int) -> str:
