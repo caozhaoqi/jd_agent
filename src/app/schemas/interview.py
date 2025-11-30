@@ -26,6 +26,10 @@ class InterviewQuestion(BaseModel):
 
 # 4. 最终返回给前端的报告
 class InterviewReport(BaseModel):
+
+    # ✅ 新增字段
+    session_id: Optional[int] = Field(None, description="数据库中的会话ID")
+
     meta: JDMetaData
     tech_questions: List[InterviewQuestion]
     hr_questions: List[InterviewQuestion]

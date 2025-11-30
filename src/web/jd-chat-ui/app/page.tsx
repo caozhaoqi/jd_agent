@@ -1,44 +1,41 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Volume2 } from "lucide-react";
-// 1. 引入 dynamic
+import ReactMarkdown from "react-markdown";
+import { useReactMediaRecorder } from "react-media-recorder";
+import {
+  Send, Bot, User, Plus, MessageSquare,
+  Loader2, Paperclip, LogOut, Mic, Play
+} from "lucide-react";
+import clsx from "clsx";
 import dynamic from "next/dynamic";
 
+// 动态导入组件
+const ChatInput = dynamic(() => import("@/components/ChatInput"), { ssr: false });
 import Sidebar from "@/components/Sidebar";
 import MessageList from "@/components/MessageList";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
-import { Message, Session, ChatMode } from "@/types/chat";
-
-// 2. 动态导入 ChatInput (禁用 SSR)
-// 这是解决 Worker 报错的唯一方法，确保录音库只在浏览器加载
-const ChatInput = dynamic(() => import("@/components/ChatInput"), {
-  ssr: false,
-  loading: () => (
-    <div className="p-4 border-t border-gray-100 bg-white">
-      <div className="max-w-3xl mx-auto bg-gray-50 border border-gray-200 rounded-2xl h-[80px] animate-pulse flex items-center justify-center text-gray-400 text-sm">
-        正在初始化输入组件...
-      </div>
-    </div>
-  )
-});
+import { Message, Session } from "@/types/chat";
 
 export default function Home() {
   const router = useRouter();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // --- 状态 ---
-  const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [mode, setMode] = useState<ChatMode>('guide');
   const [username, setUsername] = useState("Guest");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 核心状态：是否显示“开始面试”引导按钮
+  const [showStartInterviewBtn, setShowStartInterviewBtn] = useState(false);
 
   // --- Hook ---
   const { addToQueue, stopAudio } = useAudioQueue();
 
-  // --- 初始化逻辑 ---
+  // --- 初始化 ---
   useEffect(() => {
     const token = localStorage.getItem("token");
     const user = localStorage.getItem("username");
@@ -46,38 +43,32 @@ export default function Home() {
 
     setUsername(user || "User");
     if (messages.length === 0) {
-        setMessages([{ role: "assistant", content: `你好 **${user}**！请选择模式或直接开始。` }]);
+        setMessages([{ role: "assistant", content: `你好 **${user}**！请发送 **岗位描述 (JD)**，我将为你生成突击指南并准备模拟面试。` }]);
     }
     fetchSessions(token);
   }, []);
 
-  // --- API: 获取历史会话列表 ---
+  // --- 业务逻辑 ---
   const fetchSessions = async (token: string) => {
     try {
       const res = await fetch("http://127.0.0.1:8000/api/v1/history/sessions", {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(data);
-      }
+      if (res.ok) setSessions(await res.json());
     } catch (e) { console.error(e); }
   };
 
-  // --- API: 加载会话 ---
   const loadSession = async (sessionId: number) => {
     const token = localStorage.getItem("token");
     if (!token) return;
-
     setCurrentSessionId(sessionId);
-    stopAudio(); // 切换时停止播放
+    setShowStartInterviewBtn(false); // 切换会话时隐藏按钮，除非逻辑判断需要显示
+    stopAudio();
     setIsLoading(true);
-
     try {
       const res = await fetch(`http://127.0.0.1:8000/api/v1/history/messages/${sessionId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-
       if (res.ok) {
         const msgs = await res.json();
         const formatted = msgs.map((m: any) => {
@@ -92,80 +83,23 @@ export default function Home() {
              return { role: m.role, content, isJson };
         });
         setMessages(formatted);
+        // 如果最后一条是 AI 发的，且包含 JD 分析，可以显示面试按钮（这里简单处理，用户手动触发也可）
       }
     } finally { setIsLoading(false); }
   };
 
-  // --- 交互: 文件上传 ---
-  const handleFileUpload = async (file: File) => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    setIsLoading(true);
-    setMessages(prev => [...prev, { role: "user", content: `📄 上传简历: **${file.name}**` }]);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/upload-resume", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token}` },
-        body: formData
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(prev => [...prev, {
-            role: "assistant",
-            content: `✅ **简历解析成功！**\n\n已提取并记忆 ${data.new_entries} 条关键信息。\n关键事实：\n${data.extracted_facts.map((f:string) => `- ${f}`).join('\n')}`
-        }]);
-      } else {
-        throw new Error("上传失败");
-      }
-    } catch (e: any) {
-      setMessages(prev => [...prev, { role: "assistant", content: `❌ 简历上传失败: ${e.message}` }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // --- 交互: 语音上传 (ASR) ---
-  // 这里只负责接收 Blob 并上传，不负责录音过程
-  const handleAudioUpload = async (blob: Blob) => {
-      setIsLoading(true);
-      const formData = new FormData();
-      formData.append("file", blob, "voice.wav");
-
-      try {
-          const token = localStorage.getItem("token");
-          const res = await fetch("http://127.0.0.1:8000/api/v1/audio/transcribe", {
-              method: "POST",
-              headers: { "Authorization": `Bearer ${token}` },
-              body: formData
-          });
-          const data = await res.json();
-          if (data.text) {
-              // 识别成功后，直接调用发送逻辑
-              handleSend(data.text);
-          }
-      } catch (e) {
-          alert("语音识别失败");
-          setIsLoading(false);
-      }
-  };
-
-  // --- 交互: 核心发送逻辑 ---
+  // --- 核心发送逻辑 (统一入口) ---
   const handleSend = async (text: string) => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token || !text.trim()) return;
 
-    stopAudio(); // 发送时停止之前的播放
+    stopAudio();
     setIsLoading(true);
+    setShowStartInterviewBtn(false); // 发送新消息时隐藏引导按钮
     setMessages(prev => [...prev, { role: "user", content: text }]);
 
     try {
-        // A. 连续对话
+        // 🟢 情况 A: 已有会话 ID -> 走连续对话接口
         if (currentSessionId) {
             setMessages(prev => [...prev, { role: "assistant", content: "" }]);
             const res = await fetch("http://127.0.0.1:8000/api/v1/chat/stream", {
@@ -173,184 +107,147 @@ export default function Home() {
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ session_id: currentSessionId, content: text })
             });
-            await readStream(res, mode === 'mock');
-            return;
+            // 只要是连续对话，都尝试朗读（模拟面试体验）
+            await readStream(res, true);
         }
 
-        // B. 新 JD 分析
-        if (mode === 'guide') {
+        // 🔵 情况 B: 新会话 (默认视为 JD) -> 走指南生成接口
+        else {
             const res = await fetch("http://127.0.0.1:8000/api/v1/generate-guide", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ jd_text: text })
             });
             const data = await res.json();
-            setMessages(prev => [...prev, { role: "assistant", content: formatReportToMarkdown(data), isJson: true }]);
-            fetchSessions(token);
-        }
-        // C. 新模拟面试
-        else {
-            setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-            const res = await fetch("http://127.0.0.1:8000/api/v1/stream/mock-interview", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ jd_text: text })
-            });
-            await readStream(res, true);
-            fetchSessions(token);
-        }
 
+            // 1. 渲染 Markdown 报告
+            setMessages(prev => [...prev, { role: "assistant", content: formatReportToMarkdown(data), isJson: true }]);
+
+            // 2. 自动设置 Session ID (后端返回了)
+            if (data.session_id) {
+                setCurrentSessionId(data.session_id);
+                // 3. 显示“开始模拟面试”按钮
+                setShowStartInterviewBtn(true);
+            }
+
+            fetchSessions(token); // 刷新侧边栏
+        }
     } catch (e) {
-        setMessages(prev => [...prev, { role: "assistant", content: "❌ 请求失败" }]);
+        setMessages(prev => [...prev, { role: "assistant", content: "❌ 请求失败，请检查网络。" }]);
     } finally {
         setIsLoading(false);
     }
   };
 
- // --- 5. 流式读取 (支持 DeepSeek 思考过程 + 分句 TTS) ---
+  // --- 触发模拟面试 ---
+  const startMockInterview = () => {
+      handleSend("我准备好了，请扮演面试官，基于上述 JD 对我进行模拟面试。");
+  };
+
+  // --- 流式读取 (复用之前的逻辑) ---
   const readStream = async (res: Response, enableTTS: boolean) => {
       if (!res.body) return;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let bufferText = ""; // TTS 专用缓冲池
+      let bufferText = "";
 
       while (!done) {
           const { value, done: d } = await reader.read();
           done = d;
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split("\n\n");
-
           for (const line of lines) {
               if (line.startsWith("data: ")) {
-                  const dataStr = line.replace("data: ", "").trim();
-                  if (dataStr === "[DONE]") break;
-                  if (!dataStr) continue;
-
+                  const content = line.replace("data: ", "").trim();
+                  // 解析 JSON 事件 (Thought/Token)
                   try {
-                      // 1. 尝试解析为 JSON 事件
-                      const payload = JSON.parse(dataStr);
-
-                      setMessages(prev => {
-                          const newMsgs = [...prev];
-                          const lastMsg = newMsgs[newMsgs.length - 1];
-
-                          if (lastMsg.role === "assistant") {
-                              // --- A. 处理思考过程 (Thought) ---
-                              if (payload.type === 'thought') {
-                                  const currentThoughts = lastMsg.thoughts || [];
-                                  // 去重：防止同样的思考步骤重复添加
-                                  if (!currentThoughts.includes(payload.content)) {
-                                      lastMsg.thoughts = [...currentThoughts, payload.content];
-                                  }
-                              }
-                              // --- B. 处理正文内容 (Token/Result) ---
-                              else if (payload.type === 'token' || payload.type === 'result') {
-                                  // 如果是 result 类型(JSON字符串)，直接替换 content
-                                  if (payload.type === 'result') {
-                                      // 这是一个Hack，如果是最终JSON报告，我们暂存到content里
-                                      // 实际渲染时 formatReportToMarkdown 会处理它
-                                      lastMsg.content = payload.content;
-                                      lastMsg.isJson = true; // 标记为 JSON
-                                  } else {
-                                      // 普通流式 token，追加
-                                      lastMsg.content += payload.content;
-                                  }
-                              }
+                      // 简单处理：如果是 JSON 且有 content，取 content；否则直接用
+                      if (content.startsWith("{")) {
+                          const json = JSON.parse(content);
+                          if (json.type === 'token' || json.type === 'result') {
+                              updateLastMsg(json.content);
+                              if (enableTTS) bufferTTS(json.content);
                           }
-                          return newMsgs;
-                      });
-
-                      // --- C. TTS 处理 (只读正文，不读思考) ---
-                      if (enableTTS && (payload.type === 'token' || !payload.type)) {
-                          const text = payload.content || "";
-                          bufferText += text;
-                          // 分句检测
-                          if (/[。！？\.\!\?\:\n]/.test(text)) {
-                              addToQueue(bufferText);
-                              bufferText = "";
-                          }
+                      } else if (content !== "[DONE]") {
+                          updateLastMsg(content);
+                          if (enableTTS) bufferTTS(content);
                       }
-
-                  } catch (e) {
-                      // --- D. 兼容旧接口 (纯文本流) ---
-                      // 如果 JSON.parse 失败，说明是旧接口发的纯文本
-                      const text = dataStr;
-                      setMessages(prev => {
-                          const newMsgs = [...prev];
-                          const lastMsg = newMsgs[newMsgs.length - 1];
-                          if (lastMsg.role === "assistant") lastMsg.content += text;
-                          return newMsgs;
-                      });
-
-                      if (enableTTS) {
-                          bufferText += text;
-                          if (/[。！？\.\!\?\:\n]/.test(text)) {
-                              addToQueue(bufferText);
-                              bufferText = "";
-                          }
-                      }
-                  }
+                  } catch(e) {}
               }
           }
       }
 
-      // 播放剩余的 TTS 缓冲
-      if (enableTTS && bufferText.trim()) {
-          addToQueue(bufferText);
+      // 内部函数：更新 UI
+      function updateLastMsg(text: string) {
+          setMessages(prev => {
+              const newMsgs = [...prev];
+              const last = newMsgs[newMsgs.length-1];
+              if (last.role === 'assistant') last.content += text;
+              return newMsgs;
+          });
       }
+      // 内部函数：TTS 缓冲
+      function bufferTTS(text: string) {
+          bufferText += text;
+          if (/[。！？\.\!\?\:\n]/.test(text)) {
+              addToQueue(bufferText);
+              bufferText = "";
+          }
+      }
+      // 结束清理
+      if (enableTTS && bufferText.trim()) addToQueue(bufferText);
   };
 
-  // --- Markdown 格式化 ---
   const formatReportToMarkdown = (data: any) => {
-      const { meta, tech_questions, hr_questions, company_analysis, reference_sources } = data;
-      return `## 📊 ${meta.company_name || '岗位'} 分析\n\n**技术栈**: \`${meta.tech_stack.join('`, `')}\`\n\n${company_analysis ? `> 🏢 **公司**: ${company_analysis}\n\n` : ''}### 🛠️ 技术题\n${tech_questions.map((q:any,i:number)=>`**Q${i+1}: ${q.question}**\n> ${q.reference_answer}`).join('\n\n')} \n\n ### 💬 行为面试\n${hr_questions.map((q:any,i:number)=>`**Q${i+1}: ${q.question}**`).join('\n\n')} ${reference_sources?.length ? `\n---\n📚 **推荐阅读**: ${reference_sources.join(', ')}` : ''}`;
-  };
-
-  // --- 交互: 退出 ---
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/login");
+      const { meta, tech_questions, hr_questions, company_analysis } = data;
+      return `## 📊 ${meta.company_name || '岗位'} 分析\n\n**技术栈**: \`${meta.tech_stack.join('`, `')}\`\n\n${company_analysis ? `> 🏢 **公司**: ${company_analysis}\n\n` : ''}### 🛠️ 推荐技术题\n${tech_questions.map((q:any,i:number)=>`**Q${i+1}: ${q.question}**\n> ${q.reference_answer}`).join('\n\n')}`;
   };
 
   return (
     <div className="flex h-screen bg-[#f9fafb] text-gray-800 font-sans overflow-hidden">
 
-      {/* 引用子组件: 侧边栏 */}
+      {/* 侧边栏 (简化版，去掉了 Tab) */}
       <Sidebar
-        username={username}
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        mode={mode}
-        setMode={setMode}
-        onNewChat={() => { setCurrentSessionId(null); setMessages([]); stopAudio(); }}
+        username={username} sessions={sessions} currentSessionId={currentSessionId}
+        mode={'guide'} setMode={()=>{}} // 兼容旧接口
+        onNewChat={() => { setCurrentSessionId(null); setMessages([]); stopAudio(); setShowStartInterviewBtn(false); }}
         onLoadSession={loadSession}
-        onLogout={handleLogout}
+        onLogout={() => { localStorage.clear(); router.push('/login'); }}
       />
 
-      <div className="flex-1 flex flex-col h-full bg-white min-w-0">
-
-        {/* Header */}
+      <div className="flex-1 flex flex-col h-full bg-white min-w-0 relative">
         <div className="h-14 border-b flex items-center justify-between px-4 flex-shrink-0">
-            <div className="flex items-center gap-2">
-                <span className="font-bold text-lg">{mode === 'guide' ? '岗位分析' : '模拟面试'}</span>
-                {mode === 'mock' && <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full flex items-center gap-1"><Volume2 size={10}/> TTS On</span>}
-            </div>
+            <span className="font-bold text-lg">JD Agent</span>
             <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-                {currentSessionId ? `会话 #${currentSessionId}` : '新会话'}
+                {currentSessionId ? `Session #${currentSessionId}` : 'New Chat'}
             </span>
         </div>
 
-        {/* 引用子组件: 消息列表 */}
-        <MessageList messages={messages} isLoading={isLoading} />
+        {/* 消息列表 */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth relative">
+            <MessageList messages={messages} isLoading={isLoading} />
 
-        {/* 引用子组件: 底部输入区 */}
+            {/* 🟢 悬浮按钮：引导开始模拟面试 */}
+            {showStartInterviewBtn && !isLoading && (
+                <div className="flex justify-center mt-6 fade-in">
+                    <button
+                        onClick={startMockInterview}
+                        className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all font-medium animate-bounce-slow"
+                    >
+                        <Play size={18} fill="currentColor" />
+                        开始模拟面试 (语音版)
+                    </button>
+                </div>
+            )}
+        </div>
+
         <ChatInput
-          mode={mode}
+          mode={currentSessionId ? 'mock' : 'guide'} // 只是为了 UI 提示
           isLoading={isLoading}
           onSend={handleSend}
-          onFileUpload={handleFileUpload}
-          onAudioUpload={handleAudioUpload}
+          onFileUpload={()=>{}} // 暂时简化
+          onAudioUpload={(blob) => { /* 实现 ASR 逻辑 */ }}
         />
       </div>
     </div>

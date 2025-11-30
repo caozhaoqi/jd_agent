@@ -164,57 +164,35 @@ def get_messages(session_id: int, user: User = Depends(get_current_user), sessio
 async def create_guide(
         request: JDRequest,
         background_tasks: BackgroundTasks,
-        user: User = Depends(get_current_user),  # 必须登录
+        user: User = Depends(get_current_user),
         db: Session = Depends(get_session),
 ):
-    """
-    接收 JD 文本，返回完整的面试准备指南，并自动保存到历史记录。
-    """
-    # A. 调用业务逻辑生成报告
+    # 1. 生成报告
     report = await generate_interview_guide(request, db, user.id)
 
-    # B. --- 数据库存盘逻辑 ---
+    # 2. 存库
     try:
-        # 1. 创建新的会话 (ChatSession)
         title = f"{report.meta.company_name} 面试准备" if report.meta.company_name else "岗位 JD 分析"
-
-        new_session = ChatSession(
-            title=title,
-            user_id=user.id
-        )
+        new_session = ChatSession(title=title, user_id=user.id)
         db.add(new_session)
         db.commit()
         db.refresh(new_session)
 
-        # 2. 保存用户的提问
-        user_msg = ChatMessage(
-            session_id=new_session.id,
-            role="user",
-            content=request.jd_text
-        )
-        db.add(user_msg)
-
-        # 3. 保存 AI 的回答
-        ai_msg = ChatMessage(
-            session_id=new_session.id,
-            role="assistant",
-            content=report.model_dump_json()
-        )
-        db.add(ai_msg)
-
+        # 保存消息记录
+        db.add(ChatMessage(session_id=new_session.id, role="user", content=request.jd_text))
+        db.add(ChatMessage(session_id=new_session.id, role="assistant", content=report.model_dump_json()))
         db.commit()
-        logger.debug(f"✅ [DB] 会话已保存: ID={new_session.id}, Title={title}")
+
+        # ✅ 关键修改：把 ID 塞回报告里，传给前端
+        report.session_id = new_session.id
 
     except Exception as e:
-        logger.debug(f"❌ [DB Error] 保存历史记录失败: {e}")
-        # 不抛出异常，保证前端能收到报告
+        logger.error(f"❌ [DB Error] {e}")
 
-    # C. 后台更新长期记忆
-    chat_content = f"User上传了JD: {request.jd_text}"
-    background_tasks.add_task(update_long_term_memory, db, user.id, chat_content)
+    # 3. 更新长期记忆
+    background_tasks.add_task(update_long_term_memory, db, user.id, f"User上传了JD: {request.jd_text}")
 
     return report
-
 
 # ==========================================
 # 5. 流式响应接口 (Streaming)
@@ -284,9 +262,23 @@ async def stream_chat(
     # 4. 构建 Prompt
     # 如果是模拟面试模式，系统提示词需要保持“面试官”人设
     # 这里做一个简单的判断：如果标题包含"面试"，就加强面试官人设
-    system_prompt = "你是一个很有帮助的 AI 助手。"
-    if "面试" in session.title:
-        system_prompt = "你是一名严厉但专业的面试官。请根据求职者的回答进行追问，考察其技术深度。每次只问一个问题。"
+    last_user_msg = req.content
+
+    system_prompt = "你是一个专业的 AI 求职助手，负责解答用户的技术问题。"
+
+    # 如果用户触发了开始面试的关键词
+    if "模拟面试" in last_user_msg or "开始面试" in last_user_msg:
+        system_prompt = """
+            你现在是【面试官模式】。
+            请基于该会话的上下文（JD 和 简历），向候选人提出一个具体的面试问题。
+            要求：
+            1. 每次只问一个问题，不要堆砌。
+            2. 问题要犀利、具体，考察技术深度。
+            3. 等待用户回答后，再进行追问或点评。
+            """
+    elif "面试" in session.title:
+        # 如果已经在面试会话中，保持严厉
+        system_prompt = "你是一名严厉但专业的面试官。请根据求职者的回答进行追问，考察其技术深度。"
 
     # LangChain 消息构建
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -339,32 +331,49 @@ async def stream_chat(
 from fastapi.responses import Response
 
 
+# app/api/endpoints.py
+
 @router.post("/audio/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
-    from app.core.config import settings
+    """
+    ASR: 语音转文字 (适配 SiliconFlow SenseVoiceSmall)
+    """
     from openai import OpenAI
+    from app.core.config import settings
 
-    # 使用 Audio 专用配置
+    # 1. 初始化客户端
+    # 确保使用的是支持 Audio 的 API Key (如 SiliconFlow)
     client = OpenAI(
-        api_key=settings.effective_audio_key,
-        base_url=settings.effective_audio_base
+        api_key=settings.AUDIO_API_KEY or settings.OPENAI_API_KEY,
+        base_url=settings.AUDIO_API_BASE or settings.OPENAI_API_BASE
     )
 
-    file_content = await file.read()
-
     try:
+        # 2. 读取文件二进制内容
+        file_content = await file.read()
+
+        # 3. 构造 OpenAI SDK 认可的文件元组 (关键修复!)
+        # 格式: (文件名, 二进制数据, MIME类型)
+        # 如果 file.filename 为空，强制给一个 "audio.wav"
+        filename = file.filename or "audio.wav"
+
+        # 强制指定 MIME 类型，SiliconFlow 对此很敏感
+        file_tuple = (filename, file_content, "audio/wav")
+
+        # 4. 调用 API
         transcript = client.audio.transcriptions.create(
-            model=settings.ASR_MODEL,  # 使用配置的模型名
-            file=(file.filename, file_content, file.content_type)
+            model=settings.ASR_MODEL,  # 确保 .env 是 FunAudioLLM/SenseVoiceSmall
+            file=file_tuple,  # 传入构造好的元组
+            temperature=0.0
         )
         return {"text": transcript.text}
+
     except Exception as e:
-        logger.debug(f"ASR Error: {e}")
-        # 兜底：如果 API 失败，返回空
+        logger.debug(f"❌ ASR Error: {e}")
         return {"text": "", "error": str(e)}
 
 
-@router.post("/audio/tts")
+@router.post("/audio/tts_old")
 async def text_to_speech(text: str):
     """
     TTS: 文字转语音
@@ -380,8 +389,11 @@ async def text_to_speech(text: str):
     try:
         # 调用 TTS 模型 (tts-1 或 tts-1-hd)
         response = client.audio.speech.create(
-            model="tts-1",
-            voice="alloy",  # 可选: alloy, echo, fable, onyx, nova, shimmer
+            # model="tts-1",
+            # voice="alloy",  # 可选: alloy, echo, fable, onyx, nova, shimmer
+            model=settings.TTS_MODEL,
+            voice="alex",  # 注意：FishSpeech 的 voice 参数可能不同，参考官方文档
+            # input=text
             input=text
         )
 
@@ -497,3 +509,91 @@ async def stream_generate_guide(
             yield f"data: {json.dumps(data)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+import platform
+import subprocess
+import tempfile
+import os
+import uuid
+import pyttsx3  # 用于 Windows/Linux
+from fastapi.responses import Response
+
+# 预初始化 Windows/Linux 的引擎 (Mac 不用这个)
+try:
+    if platform.system() != "Darwin":
+        engine = pyttsx3.init()
+except Exception as e:
+    logger.error(f"⚠️ pyttsx3 init failed: {e}")
+
+
+@router.post("/audio/tts")
+async def text_to_speech(text: str):
+    """
+    跨平台 TTS 接口 (完全离线，零延迟)
+    - macOS: 调用 'say' 命令 -> .m4a
+    - Windows/Linux: 调用 pyttsx3 -> .wav
+    """
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="文本为空")
+
+    # 获取当前操作系统名称 ('Darwin', 'Windows', 'Linux')
+    system_os = platform.system()
+
+    # 定义临时文件路径
+    unique_id = uuid.uuid4()
+    temp_dir = tempfile.gettempdir()
+
+    try:
+        audio_data = None
+        mime_type = ""
+        output_path = ""
+
+        # ============================
+        # 🍎 方案 A: macOS (Darwin)
+        # ============================
+        if system_os == "Darwin":
+            output_path = os.path.join(temp_dir, f"tts_{unique_id}.m4a")
+            mime_type = "audio/mp4"  # m4a 属于 mp4 容器
+
+            # 使用 macOS 原生 say 命令
+            process = subprocess.run(
+                ["say", "-o", output_path, text],
+                capture_output=True,
+                text=True
+            )
+            if process.returncode != 0:
+                raise Exception(f"Mac TTS failed: {process.stderr}")
+
+        # ============================
+        # 🪟/🐧 方案 B: Windows / Linux
+        # ============================
+        else:
+            output_path = os.path.join(temp_dir, f"tts_{unique_id}.wav")
+            mime_type = "audio/wav"
+
+            # 使用 pyttsx3 (SAPI5 / eSpeak)
+            # 注意：pyttsx3 是同步阻塞的，高并发建议放入线程池，单人使用无所谓
+            engine.save_to_file(text, output_path)
+            engine.runAndWait()
+
+        # ============================
+        # 3. 读取并清理
+        # ============================
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            raise Exception("音频文件生成失败")
+
+        with open(output_path, "rb") as f:
+            audio_data = f.read()
+
+        # 删除临时文件
+        os.remove(output_path)
+
+        return Response(content=audio_data, media_type=mime_type)
+
+    except Exception as e:
+        logger.debug(f"❌ [TTS Error] OS: {system_os} | Error: {e}")
+        # 尝试清理残余文件
+        if 'output_path' in locals() and os.path.exists(output_path):
+            os.remove(output_path)
+        raise HTTPException(status_code=500, detail=f"TTS生成失败: {str(e)}")

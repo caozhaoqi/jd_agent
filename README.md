@@ -97,6 +97,8 @@ python ./src/run/main_process.py
 
 ```shell
 npm install react-media-recorder
+pip install edge-tts
+pip install pyttsx3
 ```
 
 - langgraph
