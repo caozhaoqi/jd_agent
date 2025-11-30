@@ -15,6 +15,7 @@ export function useAudioQueue() {
       const token = localStorage.getItem("token");
       if (!token) return;
 
+      // 请求 TTS
       const res = await fetch(`http://127.0.0.1:8000/api/v1/audio/tts?text=${encodeURIComponent(text!)}`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` }
@@ -26,18 +27,29 @@ export function useAudioQueue() {
         const audio = new Audio(url);
         currentAudioRef.current = audio;
 
+        // 监听播放结束
         audio.onended = () => {
           isPlayingRef.current = false;
-          processAudioQueue();
+          processAudioQueue(); // 递归播放下一条
         };
 
-        await audio.play();
+        // 🟢 核心修复：捕获播放错误
+        try {
+          await audio.play();
+        } catch (playError) {
+          console.error("⚠️ 自动播放被浏览器拦截:", playError);
+          // 如果被拦截，就不卡在这里了，直接标记结束，尝试下一条
+          // 或者在这里弹出一个 UI 提示让用户点一下
+          isPlayingRef.current = false;
+          processAudioQueue();
+        }
+
       } else {
         isPlayingRef.current = false;
         processAudioQueue();
       }
     } catch (e) {
-      console.error("TTS Play Error", e);
+      console.error("TTS Network Error", e);
       isPlayingRef.current = false;
       processAudioQueue();
     }
