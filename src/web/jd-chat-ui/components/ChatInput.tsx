@@ -17,7 +17,7 @@ export default function ChatInput({ mode, isLoading, onSend, onFileUpload, onAud
   const [input, setInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ 录音逻辑只能在这里，且此组件被 page.tsx 动态导入(ssr:false)
+  // ✅ 录音 Hook 放在这里，安全！
   const { startRecording, stopRecording, status: recordingStatus } = useReactMediaRecorder({
     audio: true,
     onStop: (blobUrl, blob) => onAudioUpload(blob)

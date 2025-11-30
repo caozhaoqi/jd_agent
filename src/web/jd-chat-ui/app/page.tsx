@@ -207,13 +207,13 @@ export default function Home() {
     }
   };
 
-  // --- 5. 流式读取与分句 TTS ---
+ // --- 5. 流式读取 (支持 DeepSeek 思考过程 + 分句 TTS) ---
   const readStream = async (res: Response, enableTTS: boolean) => {
       if (!res.body) return;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let bufferText = "";
+      let bufferText = ""; // TTS 专用缓冲池
 
       while (!done) {
           const { value, done: d } = await reader.read();
@@ -223,28 +223,79 @@ export default function Home() {
 
           for (const line of lines) {
               if (line.startsWith("data: ")) {
-                  const content = line.replace("data: ", "");
-                  if (content === "[DONE]") break;
+                  const dataStr = line.replace("data: ", "").trim();
+                  if (dataStr === "[DONE]") break;
+                  if (!dataStr) continue;
 
-                  setMessages(prev => {
-                      const newMsgs = [...prev];
-                      const lastMsg = newMsgs[newMsgs.length - 1];
-                      if (lastMsg.role === "assistant") lastMsg.content += content;
-                      return newMsgs;
-                  });
+                  try {
+                      // 1. 尝试解析为 JSON 事件
+                      const payload = JSON.parse(dataStr);
 
-                  if (enableTTS) {
-                      bufferText += content;
-                      // 简单的分句检测
-                      if (/[。！？\.\!\?\:\n]/.test(content)) {
-                          addToQueue(bufferText);
-                          bufferText = "";
+                      setMessages(prev => {
+                          const newMsgs = [...prev];
+                          const lastMsg = newMsgs[newMsgs.length - 1];
+
+                          if (lastMsg.role === "assistant") {
+                              // --- A. 处理思考过程 (Thought) ---
+                              if (payload.type === 'thought') {
+                                  const currentThoughts = lastMsg.thoughts || [];
+                                  // 去重：防止同样的思考步骤重复添加
+                                  if (!currentThoughts.includes(payload.content)) {
+                                      lastMsg.thoughts = [...currentThoughts, payload.content];
+                                  }
+                              }
+                              // --- B. 处理正文内容 (Token/Result) ---
+                              else if (payload.type === 'token' || payload.type === 'result') {
+                                  // 如果是 result 类型(JSON字符串)，直接替换 content
+                                  if (payload.type === 'result') {
+                                      // 这是一个Hack，如果是最终JSON报告，我们暂存到content里
+                                      // 实际渲染时 formatReportToMarkdown 会处理它
+                                      lastMsg.content = payload.content;
+                                      lastMsg.isJson = true; // 标记为 JSON
+                                  } else {
+                                      // 普通流式 token，追加
+                                      lastMsg.content += payload.content;
+                                  }
+                              }
+                          }
+                          return newMsgs;
+                      });
+
+                      // --- C. TTS 处理 (只读正文，不读思考) ---
+                      if (enableTTS && (payload.type === 'token' || !payload.type)) {
+                          const text = payload.content || "";
+                          bufferText += text;
+                          // 分句检测
+                          if (/[。！？\.\!\?\:\n]/.test(text)) {
+                              addToQueue(bufferText);
+                              bufferText = "";
+                          }
+                      }
+
+                  } catch (e) {
+                      // --- D. 兼容旧接口 (纯文本流) ---
+                      // 如果 JSON.parse 失败，说明是旧接口发的纯文本
+                      const text = dataStr;
+                      setMessages(prev => {
+                          const newMsgs = [...prev];
+                          const lastMsg = newMsgs[newMsgs.length - 1];
+                          if (lastMsg.role === "assistant") lastMsg.content += text;
+                          return newMsgs;
+                      });
+
+                      if (enableTTS) {
+                          bufferText += text;
+                          if (/[。！？\.\!\?\:\n]/.test(text)) {
+                              addToQueue(bufferText);
+                              bufferText = "";
+                          }
                       }
                   }
               }
           }
       }
 
+      // 播放剩余的 TTS 缓冲
       if (enableTTS && bufferText.trim()) {
           addToQueue(bufferText);
       }

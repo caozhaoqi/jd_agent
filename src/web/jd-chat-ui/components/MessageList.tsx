@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { Bot, User, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { Message } from "@/types/chat";
+import ThinkingBlock from "./ThinkingBlock";
 
 interface MessageListProps {
   messages: Message[];
@@ -26,10 +27,31 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
             </div>
             <div className={clsx("max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-7 shadow-sm border", msg.role === "user" ? "bg-blue-50 border-blue-100" : "bg-white border-gray-100")}>
               {msg.role === "assistant" ? (
-                <div className="prose prose-sm max-w-none prose-headings:text-gray-800">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
-              ) : msg.content}
+              <div className="prose prose-sm max-w-none ...">
+
+                {/* ✅ 新增：思考过程展示区 */}
+                {msg.thoughts && msg.thoughts.length > 0 && (
+                  <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="px-3 py-2 text-xs font-medium text-gray-500 bg-gray-100 border-b border-gray-200 flex items-center gap-2">
+                       <span className="animate-pulse">🧠 深度思考中...</span>
+                    </div>
+                    <div className="p-3">
+                      <ul className="space-y-1">
+                        {msg.thoughts.map((step, i) => (
+                          <li key={i} className="text-xs text-gray-600 flex gap-2">
+                            <span className="text-gray-400">{i + 1}.</span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* 正文渲染 */}
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              </div>
+            ) : msg.content}
             </div>
           </div>
         ))}

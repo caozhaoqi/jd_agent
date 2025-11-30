@@ -1,3 +1,5 @@
+import asyncio
+
 import jwt
 import json
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, UploadFile, File
@@ -13,6 +15,7 @@ from langchain_core.output_parsers import StrOutputParser
 # 1. 数据库与鉴权
 from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from app.core.models import User, ChatSession, ChatMessage, UserProfile
+from app.core.stream_manager import init_stream_queue
 from app.graph.workflow import app_graph
 
 # 2. Schema 数据模型
@@ -414,3 +417,83 @@ async def agent_feedback(thread_id: str, feedback: str, action: str = "retry"):
         pass
 
     return {"status": "Resumed"}
+
+
+@router.post("/stream/generate-guide")  # 新增一个流式接口
+async def stream_generate_guide(
+        request: JDRequest,
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_session)
+):
+    """
+    L5 级 Agent 流式生成接口 (支持 DeepSeek 思考过程)
+    """
+
+    # 1. 初始化队列 (ContextVar 会自动绑定到当前 task)
+    queue = init_stream_queue()
+
+    # 2. 定义后台运行任务
+    async def run_graph_background():
+        try:
+            initial_state = {
+                "jd_text": request.jd_text,
+                "user_id": user.id,
+                "iteration_count": 0,
+                "tech_stack": [],
+                "years_required": ""
+            }
+
+            thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
+            config = {"configurable": {"thread_id": thread_id}}
+
+            # 运行 Graph
+            final_state = await app_graph.ainvoke(initial_state, config=config)
+
+            # 运行结束，把最终结果构造成 token 类型发出去
+            # 注意：这里我们把整个 Report 打包成一个 JSON 字符串发过去
+            # 前端收到 type='result' 时，直接渲染最终报告
+            from app.schemas.interview import InterviewReport, JDMetaData
+
+            # ... 组装 Report 逻辑 (同 interview_service) ...
+            # 为了演示，简单组装
+            final_report = {
+                "meta": {
+                    "company_name": final_state.get("company_name"),
+                    "tech_stack": final_state.get("tech_stack"),
+                    "years_required": final_state.get("years_required"),
+                    "soft_skills": []
+                },
+                "tech_questions": final_state.get("tech_questions"),
+                "hr_questions": final_state.get("hr_questions"),
+                "company_analysis": final_state.get("company_info")
+            }
+
+            await queue.put({
+                "type": "result",  # 标记为最终结果
+                "content": json.dumps(final_report)
+            })
+
+        except Exception as e:
+            await queue.put({"type": "error", "content": str(e)})
+        finally:
+            # 发送结束信号
+            await queue.put(None)
+
+            # 3. 启动后台任务
+
+    task = asyncio.create_task(run_graph_background())
+
+    # 4. 定义生成器 (消费队列)
+    async def event_generator():
+        while True:
+            # 等待队列消息
+            data = await queue.get()
+
+            if data is None:  # 结束信号
+                yield "data: [DONE]\n\n"
+                break
+
+            # 发送 SSE
+            yield f"data: {json.dumps(data)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
