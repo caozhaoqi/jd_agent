@@ -173,6 +173,7 @@ export default function Home() {
 
                   if (!textToShow) continue;
 
+                  const payload = JSON.parse(content);
                   // 更新 UI
                   setMessages(prev => {
                       if (prev.length === 0) return prev;
