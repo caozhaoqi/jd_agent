@@ -116,17 +116,28 @@ export default function Home() {
         }
         // 🔵 场景 B: 指南
         else if (mode === 'guide') {
-            const res = await fetch("http://127.0.0.1:8000/api/v1/generate-guide", {
+//             const res = await fetch("http://127.0.0.1:8000/api/v1/generate-guide", {
+//                 method: "POST",
+//                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+//                 body: JSON.stringify({ jd_text: msgToSend })
+//             });
+//             const data = await res.json();
+
+            // ✅ 新代码：使用流式接口
+            // 1. 先创建一个空的 Assistant 消息占位
+            setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+            const res = await fetch("http://127.0.0.1:8000/api/v1/stream/generate-guide", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ jd_text: msgToSend })
             });
-            const data = await res.json();
-            setMessages(prev => [...prev, { role: "assistant", content: formatReportToMarkdown(data), isJson: true }]);
-            if (data.session_id) {
-                setCurrentSessionId(data.session_id);
-                setShowStartInterviewBtn(true);
-            }
+
+            // 2. 调用 readStream 读取流 (Dashboard 数据会在这里被解析)
+            // 注意：生成指南时通常不需要 TTS 朗读全文，所以第二个参数传 false (或者 true 看你喜好)
+            await readStream(res, false);
+
+            // 3. 结束后刷新侧边栏
             fetchSessions(token);
         }
         // 🟣 场景 C: 模拟面试
@@ -148,7 +159,7 @@ export default function Home() {
     }
   };
 
-  // --- 流式读取 ---
+  // --- 5. 流式读取与分句 TTS (修复语法与逻辑) ---
   const readStream = async (res: Response, enableTTS: boolean) => {
       if (!res.body) return;
       const reader = res.body.getReader();
@@ -156,86 +167,111 @@ export default function Home() {
       let done = false;
       let bufferText = "";
 
-      while (!done) {
-          const { value, done: d } = await reader.read();
-          done = d;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n\n");
+      try {
+          while (!done) {
+              const { value, done: d } = await reader.read();
+              done = d;
+              const chunk = decoder.decode(value, { stream: true });
+              const lines = chunk.split("\n\n");
 
-          for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                  const content = line.replace("data: ", "").trim();
-                  if (content === "[DONE]") break;
+              for (const line of lines) {
+                  if (line.startsWith("data: ")) {
+                      const dataStr = line.replace("data: ", "").trim();
+                      if (dataStr === "[DONE]") break;
+                      if (!dataStr) continue;
 
-                  // 尝试解析 JSON
-                  let textToShow = "";
-                  try {
-                      if (content.startsWith("{")) {
-                        const json = JSON.parse(content);
-                        if (json.type === 'token' || json.type === 'result') {
-                            textToShow = json.content || "";
-                        }
-                      } else {
-                          textToShow = content;
+                      try {
+                          // 尝试解析 JSON
+                          const payload = JSON.parse(dataStr);
+
+                          // 1. 更新消息 UI (思考流 / 结果 / Token)
+                          setMessages(prev => {
+                              if (prev.length === 0) return prev;
+                              const newMsgs = [...prev];
+                              const lastIndex = newMsgs.length - 1;
+                              const lastMsg = newMsgs[lastIndex];
+
+                              if (lastMsg.role === "assistant") {
+                                  // A. 思考流 (Thought)
+                                  if (payload.type === 'thought') {
+                                      const currentThoughts = lastMsg.thoughts || [];
+                                      // 简单去重
+                                      if (currentThoughts[currentThoughts.length - 1] !== payload.content) {
+                                          newMsgs[lastIndex] = {
+                                              ...lastMsg,
+                                              thoughts: [...currentThoughts, payload.content]
+                                          };
+                                      }
+                                  }
+                                  // B. 最终结果 (Result) -> 转 Markdown
+                                  else if (payload.type === 'result') {
+                                      try {
+                                          const reportData = JSON.parse(payload.content);
+                                          const markdown = formatReportToMarkdown(reportData);
+
+                                          newMsgs[lastIndex] = {
+                                              ...lastMsg,
+                                              content: markdown,
+                                              isJson: true
+                                          };
+
+                                          // 如果有 session_id，显示开始面试按钮
+                                          if (reportData.session_id) {
+                                              setCurrentSessionId(reportData.session_id);
+                                              setShowStartInterviewBtn(true);
+                                          }
+                                      } catch (e) {
+                                          console.error("Report Parse Error", e);
+                                      }
+                                  }
+                                  // C. 普通内容流 (Token)
+                                  else if (payload.type === 'token') {
+                                      newMsgs[lastIndex] = {
+                                          ...lastMsg,
+                                          content: lastMsg.content + (payload.content || "")
+                                      };
+                                  }
+                              }
+                              return newMsgs;
+                          });
+
+                          // 2. 更新 Dashboard (Data)
+                          if (payload.type === 'data') {
+                              const { key, value } = payload;
+                              setDashboardData(prev => {
+                                  if (key === 'user_profile') return { ...prev, userProfile: value };
+                                  if (key === 'rag_sources') return { ...prev, ragSources: value };
+                                  if (key === 'current_step') return { ...prev, currentStep: value };
+                                  return prev;
+                              });
+                          }
+
+                          // 3. TTS 处理 (仅针对 token)
+                          if (enableTTS && payload.type === 'token' && payload.content) {
+                              const text = payload.content;
+                              bufferText += text;
+                              // 简单的分句检测
+                              if (/[。！？\.\!\?\:\n]/.test(text)) {
+                                  addToQueue(bufferText);
+                                  bufferText = "";
+                              }
+                          }
+
+                      } catch (e) {
+                          // 兼容非 JSON 的纯文本流 (如果有的话)
+                          console.warn("Stream parse error or plain text:", e);
                       }
-                  } catch(e) { textToShow = content; }
-
-                  if (!textToShow) continue;
-
-                  const payload = JSON.parse(content);
-                  // 更新 UI
-                  setMessages(prev => {
-                      if (prev.length === 0) return prev;
-                      const newMsgs = [...prev];
-                      const lastIndex = newMsgs.length - 1;
-                      const lastMsg = newMsgs[lastIndex];
-                      if (lastMsg.role === "assistant") {
-                            // 🅰️ 思考流
-                            if (payload.type === 'thought') {
-                                const currentThoughts = lastMsg.thoughts || [];
-                                // 简单去重，或者直接追加
-                                if (currentThoughts[currentThoughts.length-1] !== payload.content) {
-                                    newMsgs[lastIndex] = {
-                                        ...lastMsg,
-                                        thoughts: [...currentThoughts, payload.content]
-                                    };
-                                }
-                            }
-                            // 🅱️ 内容流
-                            else if (payload.type === 'token' || payload.type === 'result') {
-                                // 如果是 result (全量JSON)，可以特殊处理，这里假设是 token 累加
-                                const newContent = payload.content || "";
-                                newMsgs[lastIndex] = {
-                                    ...lastMsg,
-                                    content: lastMsg.content + newContent
-                                };
-                            }
-                        }
-                      return newMsgs;
-                  });
-                  // ✅ 新增：处理 dashboard 数据
-                  if (payload.type === 'data') {
-                      const { key, value } = payload;
-                      setDashboardData(prev => {
-                          if (key === 'user_profile') return { ...prev, userProfile: value };
-                          if (key === 'rag_sources') return { ...prev, ragSources: value };
-                          if (key === 'current_step') return { ...prev, currentStep: value };
-                          return prev;
-                      });
-                  }
-                  // 🔊 TTS 仅处理 token 类型
-                  if (enableTTS && (payload.type === 'token')) {
-                      bufferText += textToShow;
-                      if (/[。！？\.\!\?\:\n]/.test(textToShow)) {
-                          addToQueue(bufferText);
-                          bufferText = "";
-                      }
-                      bufferTTS(payload.content)
                   }
               }
           }
+      } catch (err) {
+          console.error("Stream reading failed:", err);
+      } finally {
+          // 播放剩余的 TTS 缓冲
+          if (enableTTS && bufferText.trim()) {
+              addToQueue(bufferText);
+          }
       }
-      if (enableTTS && bufferText.trim()) addToQueue(bufferText);
   };
 
   const startMockInterview = () => {

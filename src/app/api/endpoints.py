@@ -458,7 +458,8 @@ async def stream_generate_guide(
                 "user_id": user.id,
                 "iteration_count": 0,
                 "tech_stack": [],
-                "years_required": ""
+                "years_required": "",
+                "company_name": ""
             }
 
             thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
@@ -472,27 +473,67 @@ async def stream_generate_guide(
             # 前端收到 type='result' 时，直接渲染最终报告
             from app.schemas.interview import InterviewReport, JDMetaData
 
+            # --- 🟢 核心修复开始 ---
+            # 1. 处理 Technical Questions
+            raw_tech_qs = final_state.get("tech_questions", [])
+            # 如果是 Pydantic 对象，转为 dict；如果是 dict (如解析失败fallback)，保持原样
+            tech_qs_dicts = [
+                q.model_dump() if hasattr(q, "model_dump") else q
+                for q in raw_tech_qs
+            ]
+
+            # 2. 处理 HR Questions
+            raw_hr_qs = final_state.get("hr_questions", [])
+            hr_qs_dicts = [
+                q.model_dump() if hasattr(q, "model_dump") else q
+                for q in raw_hr_qs
+            ]
+
             # ... 组装 Report 逻辑 (同 interview_service) ...
             # 为了演示，简单组装
-            final_report = {
-                "meta": {
-                    "company_name": final_state.get("company_name"),
-                    "tech_stack": final_state.get("tech_stack"),
-                    "years_required": final_state.get("years_required"),
-                    "soft_skills": []
-                },
-                "tech_questions": final_state.get("tech_questions"),
-                "hr_questions": final_state.get("hr_questions"),
-                "company_analysis": final_state.get("company_info")
+            # 简单构造 Meta
+            final_meta = {
+                "company_name": final_state.get("company_name"),
+                "tech_stack": final_state.get("tech_stack"),
+                "years_required": final_state.get("years_required"),
+                "soft_skills": []  # 暂空
             }
+
+            final_report = {
+                "meta": final_meta,
+                "tech_questions": tech_qs_dicts,
+                "hr_questions": hr_qs_dicts,
+                "company_analysis": final_state.get("company_info"),
+                "session_id": None
+            }
+
+            # --- 存库逻辑 (可选，建议加上) ---
+            try:
+                title = f"{final_meta['company_name']} 面试准备" if final_meta['company_name'] else "JD 分析"
+                new_sess = ChatSession(title=title, user_id=user.id)
+                db.add(new_sess)
+                db.commit()
+                db.refresh(new_sess)
+                final_report["session_id"] = new_sess.id
+                # 保存消息
+                db.add(ChatMessage(session_id=new_sess.id, role="user", content=request.jd_text))
+                db.add(ChatMessage(session_id=new_sess.id, role="assistant", content=json.dumps(final_report)))
+                db.commit()
+            except Exception as db_e:
+                logger.error(f"DB Error: {db_e}")
 
             await queue.put({
                 "type": "result",  # 标记为最终结果
                 "content": json.dumps(final_report)
             })
 
+
         except Exception as e:
+
+            logger.error(f"❌ [Graph Error] {e}")  # 打印错误堆栈
+
             await queue.put({"type": "error", "content": str(e)})
+
         finally:
             # 发送结束信号
             await queue.put(None)

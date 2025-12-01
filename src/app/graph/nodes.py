@@ -14,13 +14,15 @@ from app.core.stream_manager import send_thought, send_data
 
 # --- Node 1: JD Parser ---
 async def jd_parser_node(state: AgentState):
-    # logger.debug 留着给自己看日志，send_thought 发给前端看
-    logger.debug("🔍 [Agent: Parser] 正在分析 JD...")
-    await send_thought("🔍 正在深度解析岗位 JD...", "提取技术栈与硬性要求")
+    await send_thought("🔍 [Parser] 正在深度解析 JD...", "提取核心技术栈")
+    # ✅ 触发 Dashboard 更新: 步骤高亮
+    await send_data("current_step", "parser")
 
     meta = await parse_jd_async(state["jd_text"])
-    # ✅ 埋点：告诉前端当前步骤
-    await send_data("current_step", "parser")
+
+    # ✅ 触发 Dashboard 更新: 用户画像 (Tech Stack)
+    await send_data("user_profile", meta.tech_stack)
+
     return {
         "company_name": meta.company_name,
         "tech_stack": meta.tech_stack,
@@ -31,33 +33,34 @@ async def jd_parser_node(state: AgentState):
 
 # --- Node 2: Researcher ---
 async def researcher_node(state: AgentState):
-    company = state.get("company_name", "目标公司")
-    logger.debug(f"🕵️ [Agent: Researcher] 正在背调: {company}")
-    await send_thought(f"🕵️ 正在进行全网背调: {company}", "检索新闻、财报与业务动态")
-    await send_data("current_step", "researcher")  # ✅ 更新步骤
+    await send_thought(f"🕵️ [Researcher] 正在背调: {state.get('company_name')}")
+    # ✅ 触发 Dashboard 更新
+    await send_data("current_step", "researcher")
 
-    info = await research_company(company)
-    await send_data("rag_sources", info)  # ✅ 发送 RAG 数据
+    info = await research_company(state["company_name"])
+
+    # ✅ 触发 Dashboard 更新: RAG 来源 (模拟数据，实际应从 research_company 返回)
+    # 如果 research_company 返回的是字符串，这里可以构造一个假的或者修改 chain 返回结构
+    mock_sources = [
+        {"title": f"{state.get('company_name')} 官网", "url": "#", "score": 0.98},
+        {"title": "AI 商业分析报告", "url": "#", "score": 0.85}
+    ]
+    await send_data("rag_sources", mock_sources)
+
     return {"company_info": info}
 
 
 # --- Node 3: Tech Lead ---
 async def tech_lead_node(state: AgentState):
-    iteration = state.get("iteration_count", 0)
-    await send_data("current_step", "tech_lead")  # ✅ 更新步骤
-    logger.debug(f"💻 [Agent: TechLead] 开始出题 (第 {iteration + 1} 版)...")
-    await send_thought(f"💻 技术面试官正在出题 (v{iteration + 1})", "基于技术栈构建硬核问题")
+    await send_thought("💻 [TechLead] 正在构思面试题...")
+    # ✅ 触发 Dashboard 更新
+    await send_data("current_step", "tech_lead")
 
     questions = await generate_tech_async(
         state["tech_stack"],
         state["years_required"]
     )
-
-    return {
-        "tech_questions": questions,
-        "iteration_count": iteration + 1,
-        "human_feedback": None
-    }
+    return {"tech_questions": questions, "iteration_count": state.get("iteration_count", 0) + 1}
 
 
 # --- Node 4: HR Agent ---
