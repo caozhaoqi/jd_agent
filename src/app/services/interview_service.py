@@ -1,12 +1,23 @@
 # 确保导入了 JDMetaData
 from sqlmodel import Session
 
+from app.core.stream_manager import send_data
 from app.graph.workflow import app_graph
 from app.schemas.interview import InterviewReport, JDRequest, JDMetaData
 from loguru import logger
 
+from app.services.memory_service import get_user_profile_str
+
+
 async def generate_interview_guide(request: JDRequest, db: Session, user_id: int) -> InterviewReport:
     logger.info("🚀 [L5 Agent] Starting Multi-Agent Swarm...")
+    # 1. 获取记忆
+    ltm_profile = get_user_profile_str(db, user_id)
+
+    # ✅ 埋点：发送用户画像 (假设 ltm_profile 是字符串，我们转成列表 tag)
+    # 简单处理：按换行符切分，或者让 get_user_profile 返回 list
+    tags = [line.strip("- ") for line in ltm_profile.split("\n") if line.strip()]
+    await send_data("user_profile", tags)
 
     # 1. 准备初始状态
     initial_state = {

@@ -40,3 +40,17 @@ async def send_done():
     q = get_stream_queue()
     if q:
         await q.put(None) # None 代表结束
+
+
+async def send_data(key: str, data: Any):
+    """
+    发送结构化数据给前端仪表盘
+    key: 'user_profile' | 'rag_sources' | 'current_step'
+    """
+    q = get_stream_queue()
+    if q:
+        await q.put({
+            "type": "data",
+            "key": key,
+            "value": data
+        })

@@ -13,6 +13,8 @@ import Sidebar from "@/components/Sidebar";
 import MessageList from "@/components/MessageList";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
 import { Message, Session, ChatMode } from "@/types/chat";
+import { PanelRightOpen, PanelRightClose } from "lucide-react"; // 新图标
+import BrainDashboard, { DashboardState } from "@/components/BrainDashboard";
 
 const ChatInput = dynamic(() => import("@/components/ChatInput"), {
   ssr: false,
@@ -35,6 +37,13 @@ export default function Home() {
   const [username, setUsername] = useState("Guest");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+ // ✅ Dashboard 状态
+  const [showDashboard, setShowDashboard] = useState(true); // 控制面板开关
+  const [dashboardData, setDashboardData] = useState<DashboardState>({
+    currentStep: "",
+    userProfile: [],
+    ragSources: []
+  });
 
   // ✅ 新增：全局 TTS 开关 (默认开启)
   const [isTTSEnabled, setIsTTSEnabled] = useState(true);
@@ -204,7 +213,16 @@ export default function Home() {
                         }
                       return newMsgs;
                   });
-
+                  // ✅ 新增：处理 dashboard 数据
+                  if (payload.type === 'data') {
+                      const { key, value } = payload;
+                      setDashboardData(prev => {
+                          if (key === 'user_profile') return { ...prev, userProfile: value };
+                          if (key === 'rag_sources') return { ...prev, ragSources: value };
+                          if (key === 'current_step') return { ...prev, currentStep: value };
+                          return prev;
+                      });
+                  }
                   // 🔊 TTS 仅处理 token 类型
                   if (enableTTS && (payload.type === 'token')) {
                       bufferText += textToShow;
@@ -289,6 +307,14 @@ export default function Home() {
                 {isTTSEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
                 <span className="hidden sm:inline">{isTTSEnabled ? "语音开" : "语音关"}</span>
             </button>
+            {/* ✅ Dashboard 开关 */}
+               <button
+                   onClick={() => setShowDashboard(!showDashboard)}
+                   className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+                   title="切换大脑视图"
+               >
+                   {showDashboard ? <PanelRightClose size={20}/> : <PanelRightOpen size={20}/>}
+               </button>
         </div>
 
         <MessageList
@@ -300,6 +326,16 @@ export default function Home() {
           mode={mode} isLoading={isLoading} onSend={handleSend}
           onFileUpload={()=>{}} onAudioUpload={(blob) => { /* ASR */ }}
         />
+      </div>
+       {/* ✅ 右侧仪表盘 (动画滑入) */}
+      <div className={clsx(
+          "bg-[#fcfdfd] border-l border-gray-200 transition-all duration-300 ease-in-out flex flex-col",
+          showDashboard ? "w-[300px] translate-x-0" : "w-0 translate-x-full overflow-hidden border-none"
+      )}>
+          <div className="p-4 border-b border-gray-100 font-bold text-sm text-gray-700">
+              🧠 Agent 状态监控
+          </div>
+          <BrainDashboard data={dashboardData} />
       </div>
     </div>
   );

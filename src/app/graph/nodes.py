@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 from loguru import logger
 # ✅ 引入我们刚才写的工具
-from app.core.stream_manager import send_thought
+from app.core.stream_manager import send_thought, send_data
 
 
 # --- Node 1: JD Parser ---
@@ -19,6 +19,8 @@ async def jd_parser_node(state: AgentState):
     await send_thought("🔍 正在深度解析岗位 JD...", "提取技术栈与硬性要求")
 
     meta = await parse_jd_async(state["jd_text"])
+    # ✅ 埋点：告诉前端当前步骤
+    await send_data("current_step", "parser")
     return {
         "company_name": meta.company_name,
         "tech_stack": meta.tech_stack,
@@ -32,14 +34,17 @@ async def researcher_node(state: AgentState):
     company = state.get("company_name", "目标公司")
     logger.debug(f"🕵️ [Agent: Researcher] 正在背调: {company}")
     await send_thought(f"🕵️ 正在进行全网背调: {company}", "检索新闻、财报与业务动态")
+    await send_data("current_step", "researcher")  # ✅ 更新步骤
 
     info = await research_company(company)
+    await send_data("rag_sources", info)  # ✅ 发送 RAG 数据
     return {"company_info": info}
 
 
 # --- Node 3: Tech Lead ---
 async def tech_lead_node(state: AgentState):
     iteration = state.get("iteration_count", 0)
+    await send_data("current_step", "tech_lead")  # ✅ 更新步骤
     logger.debug(f"💻 [Agent: TechLead] 开始出题 (第 {iteration + 1} 版)...")
     await send_thought(f"💻 技术面试官正在出题 (v{iteration + 1})", "基于技术栈构建硬核问题")
 
