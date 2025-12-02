@@ -1,5 +1,5 @@
 from typing import List, Optional  # <--- 1. 必须导入 Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # 1. 接收前端传来的 JD
@@ -9,12 +9,27 @@ class JDRequest(BaseModel):
 
 
 # 2. JD 解析后的结构化数据
+# 2. JD 解析后的结构化数据
 class JDMetaData(BaseModel):
-    tech_stack: List[str] = Field(description="技术栈列表，如 Python, K8s")
-    years_required: str = Field(description="经验要求")
-    core_responsibility: str = Field(description="核心职责摘要")
-    soft_skills: List[str] = Field(description="软技能列表")
+    tech_stack: List[str] = Field(default_factory=list, description="技术栈列表，如 Python, K8s")
+
+    # 🟢 核心修复：允许为 None，并提供默认值
+    years_required: Optional[str] = Field(default="不限", description="经验要求")
+
+    core_responsibility: str = Field(default="暂无核心职责描述", description="核心职责摘要")
+    soft_skills: List[str] = Field(default_factory=list, description="软技能列表")
+
+    # 同样给公司名称加个容错
     company_name: Optional[str] = Field(default="", description="公司名称")
+
+    # 🟢 进阶修复：如果 LLM 显式返回了 null (None)，强制转为默认字符串
+    # 这一步是为了防止后续代码(如生成题目时)用到 years_required 报错
+    @field_validator('years_required', mode='before')
+    @classmethod
+    def handle_none_years(cls, v):
+        if v is None:
+            return "不限"
+        return v
 
 
 # 3. 单个面试题结构
