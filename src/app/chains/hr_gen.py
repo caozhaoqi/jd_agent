@@ -1,6 +1,8 @@
 from typing import List
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
 from app.core.llm_factory import get_llm
 from app.schemas.interview import InterviewQuestion
@@ -9,6 +11,21 @@ from app.schemas.interview import InterviewQuestion
 # 辅助模型
 class QuestionList(BaseModel):
     questions: List[InterviewQuestion]
+
+
+# ✅ 新增：清洗函数 (与 tech_gen.py 保持一致)
+def clean_json_output(text: str) -> str:
+    text = text.strip()
+    # 移除 ```json 和 结尾的 ```
+    if "```json" in text:
+        text = text.split("```json")[1]
+    elif "```" in text:
+        text = text.split("```")[1]
+
+    if text.endswith("```"):
+        text = text[:-3]
+
+    return text.strip()
 
 
 async def generate_hr_async(soft_skills: List[str], company_info: str = "") -> List[InterviewQuestion]:
@@ -36,18 +53,29 @@ async def generate_hr_async(soft_skills: List[str], company_info: str = "") -> L
         1. 基于 STAR 法则（情境、任务、行动、结果）设计。
         2. 如果提供了公司背景，请尝试结合公司文化提问。
         3. 类别标记为 'HR/Behavioral'。
+        4. 严格按照 JSON 格式输出，不要包含 Markdown 代码块。
 
         请严格按照 JSON 格式输出:
         {format_instructions}
         """
     )
 
-    chain = prompt | llm | parser
+    # ✅ 关键修改：构造包含清洗步骤的 Chain
+    chain = (
+            prompt
+            | llm
+            | StrOutputParser()
+            | RunnableLambda(clean_json_output)
+            | parser
+    )
 
-    result = await chain.ainvoke({
-        "context_str": context_str,
-        "soft_skills": ", ".join(soft_skills),
-        "format_instructions": parser.get_format_instructions()
-    })
-
-    return result.questions
+    try:
+        result = await chain.ainvoke({
+            "context_str": context_str,
+            "soft_skills": ", ".join(soft_skills),
+            "format_instructions": parser.get_format_instructions()
+        })
+        return result.questions
+    except Exception as e:
+        print(f"❌ HR Gen Parse Error: {e}")
+        return []

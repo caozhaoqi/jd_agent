@@ -31,7 +31,7 @@ export default function ThinkingBlock({ thoughts, isFinished }: ThinkingBlockPro
 
   const statusText = isFinished
     ? `深度思考已完成 (耗时 ${elapsed.toFixed(1)}s)`
-    : "DeepSeek 正在思考...";
+    : "JD agent 正在思考...";
 
   return (
     <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden transition-all duration-300">
