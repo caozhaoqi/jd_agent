@@ -33,6 +33,14 @@ async def jd_parser_node(state: AgentState):
 
 # --- Node 2: Researcher ---
 async def researcher_node(state: AgentState):
+    company = state.get("company_name")
+
+    # 1. 预判：如果是模糊指代，直接跳过搜索
+    # 简单判断：是否包含 "某", "知名", "头部" 且不包含 "公司" 或字数太少
+    if not company or "某" in company or len(company) < 4:
+        await send_thought("⚠️ 公司名称模糊，跳过精确背调", "将基于行业通用标准分析")
+        return {"company_info": "JD 未提供具体公司名称，基于行业通用背景进行分析。"}
+
     await send_thought(f"🕵️ [Researcher] 正在背调: {state.get('company_name')}")
     # ✅ 触发 Dashboard 更新
     await send_data("current_step", "researcher")

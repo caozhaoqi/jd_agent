@@ -106,3 +106,10 @@ pip install pyttsx3
 ```shell
 pip install langgraph langchain-openai
 ```
+
+- company
+
+```shell
+pip install duckduckgo-search
+pip install google-search-results
+```
