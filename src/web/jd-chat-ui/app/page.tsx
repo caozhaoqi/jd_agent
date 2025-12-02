@@ -51,7 +51,7 @@ export default function Home() {
   const [showStartInterviewBtn, setShowStartInterviewBtn] = useState(false);
 
   // --- Hook ---
-  const { addToQueue, stopAudio } = useAudioQueue();
+  const { addToQueue, stopAudio, unlockAudio } = useAudioQueue();
 
   // --- 初始化 ---
   useEffect(() => {
@@ -93,7 +93,10 @@ export default function Home() {
     const msgToSend = text;
     if (!msgToSend?.trim() || isLoading) return;
 
-    unlockAudioContext();
+    // 2. ✅ 关键：用户点击瞬间，立即调用解锁
+    // 这会播放那段静音，激活浏览器的 Audio 权限
+    unlockAudio();
+
     const token = localStorage.getItem("token");
     if (!token) return;
 
