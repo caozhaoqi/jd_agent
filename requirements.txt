@@ -1,3 +1,4 @@
+livekit
 edge-tts
 flask
 openai

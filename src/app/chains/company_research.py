@@ -1,5 +1,6 @@
 import asyncio
 import httpx
+import os
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -7,54 +8,80 @@ from loguru import logger
 
 from app.core.llm_factory import get_llm
 
-# 1. 初始化工具
-search_tool = TavilySearchResults(max_results=3)
 
+# ❌ 移除全局初始化，防止启动时因缺少 Key 崩溃
+# search_tool = TavilySearchResults(max_results=3)
 
 async def fetch_website_content(url: str) -> str:
-    """Jina Reader 抓取逻辑 (保持不变)"""
+    """
+    利用 Jina Reader 将网页转为 Markdown (免费、无Key)
+    """
     jina_url = f"https://r.jina.ai/{url}"
     headers = {"User-Agent": "Mozilla/5.0"}
+
     async with httpx.AsyncClient(verify=False) as client:
         try:
+            # 设置 8秒 超时，防止卡死
             resp = await client.get(jina_url, timeout=8, headers=headers)
             if resp.status_code == 200:
-                return resp.text[:2000]  # 进一步缩减字符数，只看头部核心信息
+                # 截取前 2500 字符，防止 Token 爆炸
+                return resp.text[:2500]
             return ""
-        except Exception:
+        except Exception as e:
+            logger.debug(f"⚠️ Jina Reader failed for {url}: {e}")
             return ""
 
 
 async def research_company(company_name: str) -> str:
+    """
+    L5 级背调：搜索 + 筛选 + 深度阅读 + 总结
+    """
     # --- 0. 兜底逻辑 ---
     if not company_name or len(company_name) < 2 or "某" in company_name:
         return "⚠️ **提示**：JD 未提供具体公司名称，无法进行精确背调。"
 
+    # --- 1. 安全检查与工具初始化 (懒加载) ---
+    # 只有在真正调用函数时，才检查环境变量
+    tavily_key = os.environ.get("TAVILY_API_KEY")
+    if not tavily_key:
+        logger.debug("⚠️ 未检测到 TAVILY_API_KEY，跳过联网搜索。")
+        return "⚠️ 系统未配置搜索服务(Tavily)，无法获取公司背景。"
+
+    try:
+        # ✅ 修复核心：在函数内部初始化，避免启动崩溃
+        search_tool = TavilySearchResults(max_results=3)
+    except Exception as e:
+        logger.debug(f"❌ Tavily Init Error: {e}")
+        return "搜索工具初始化失败。"
+
     logger.debug(f"🕵️ [Research] 开始全网搜索: {company_name}")
 
-    # --- 1. 关键词扩展 ---
+    # --- 2. 关键词扩展 ---
     queries = [
         f"{company_name} 官网 核心业务",
         f"{company_name} 融资情况 发展",
         f"{company_name} 技术团队 评价"
     ]
 
-    # --- 2. 并行搜索 ---
+    # --- 3. 并行搜索 ---
+    search_results = []
     try:
-        search_results = []
+        # Tavily 的异步支持可能不稳定，这里做个简单的循环处理
+        # 如果想要极致并发，可以用 asyncio.to_thread
         for q in queries:
-            # 使用 ainvoke (如果 langchain 版本支持) 或同步 invoke
             try:
+                # 尝试异步调用
                 res = await search_tool.ainvoke(q)
             except:
-                res = search_tool.invoke(q)  # 降级同步
+                # 降级为同步调用
+                res = search_tool.invoke(q)
 
             if isinstance(res, list):
                 search_results.extend(res)
     except Exception as e:
         return f"搜索服务异常: {e}"
 
-    # --- 3. 结果清洗与官网抓取 ---
+    # --- 4. 结果清洗与官网探测 ---
     seen_urls = set()
     unique_results = []
     best_url = None
@@ -68,23 +95,26 @@ async def research_company(company_name: str) -> str:
             # 仅保留较短的摘要，减少噪音
             unique_results.append(f"- {content[:150]}")
 
+            # 简单的官网探测策略：优先排除第三方平台
             if not best_url and "官网" in queries[0] and not any(
-                    x in url for x in ["zhihu", "baike", "job", "boss", "36kr"]):
+                    x in url for x in ["zhihu", "baike", "job", "boss", "36kr", "linkedin"]):
                 best_url = url
 
-    # --- 4. 深度阅读 ---
+    # --- 5. 深度阅读 (钓大鱼) ---
     deep_content = ""
     if best_url:
         logger.debug(f"📖 [Research] 正在深度阅读官网: {best_url}")
         deep_content = await fetch_website_content(best_url)
+        if deep_content:
+            deep_content = f"\n\n=== 官网深度抓取 ({best_url}) ===\n{deep_content}\n"
 
-    # --- 5. LLM 总结 (✨ 核心优化点) ---
+    # --- 6. LLM 总结 (Prompt 优化版) ---
     llm = get_llm(temperature=0.2)  # 调低温度，让输出更稳定干练
 
-    context_text = "\n".join(unique_results[:6])  # 减少输入量，防止干扰
-    full_context = f"【搜索摘要】:\n{context_text}\n\n【官网首页】:\n{deep_content}"
+    context_text = "\n".join(unique_results[:6])  # 减少输入量
+    full_context = f"【搜索摘要】:\n{context_text}\n\n{deep_content}"
 
-    # ✅ 优化后的 Prompt：强制 Markdown 格式 + 列表化
+    # 强制 Markdown 格式 + 列表化
     prompt = ChatPromptTemplate.from_template(
         """
         你是一个极其精炼的商业情报分析师。请根据搜集到的信息，生成一份**极简**的公司背景报告。

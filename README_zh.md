@@ -113,3 +113,11 @@ pip install langgraph langchain-openai
 pip install duckduckgo-search
 pip install google-search-results
 ```
+
+- webrtc
+
+```shell
+https://cloud.livekit.io/projects/p_pp4stadopf1/settings/keys
+npm install livekit-client @livekit/components-react @livekit/components-styles
+pip install livekit-agents livekit-plugins-openai livekit-plugins-siliconflow livekit-plugins-deepgram python-dotenv
+```
