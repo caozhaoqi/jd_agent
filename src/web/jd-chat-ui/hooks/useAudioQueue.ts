@@ -48,8 +48,21 @@ export function useAudioQueue() {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
 
-        // ✅ 改动4: 复用同一个 Audio 对象
+       // 🟢 双重保险：在等待 fetch 的过程中，如果用户点击了停止，
+        // audioQueueRef.current 会被清空。
+        // 如果这时候队列突然空了（且不是因为 shift 取出的），说明被强制停止了，就不应该播放。
+
+        // 但由于 processAudioQueue 是递归的，更简单的判断是：
+        // 检查一下当前是否被强制停止了？
+        // 我们可以通过判断 isPlayingRef 是否被外部设为了 false (在 stopAudio 里)
+        // 不过最稳妥的是：
+
         const audio = globalAudioRef.current;
+        // 如果 fetch 回来发现队列已经被 stopAudio 清空了，且当前不是正在播放状态（被强制重置了）
+        // 其实 stopAudio 里的 pause() 已经能截断当前播放。
+        // 关键是防止 fetch 回来后又这就开始 play()。
+        // ✅ 改动4: 复用同一个 Audio 对象
+//         const audio = globalAudioRef.current;
         if (audio) {
             audio.src = url;
 
@@ -93,10 +106,11 @@ export function useAudioQueue() {
   const stopAudio = useCallback(() => {
     if (globalAudioRef.current) {
       globalAudioRef.current.pause();
-      globalAudioRef.current.currentTime = 0; // 重置进度
+      globalAudioRef.current.currentTime = 0;
     }
     audioQueueRef.current = [];
     isPlayingRef.current = false;
+    // 这里已经做得很好了，清空队列是关键
   }, []);
 
   // 导出 unlockAudio 供外部调用

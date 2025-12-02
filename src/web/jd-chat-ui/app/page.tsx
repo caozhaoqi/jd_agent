@@ -48,6 +48,10 @@ export default function Home() {
   // ✅ 新增：全局 TTS 开关 (默认开启)
   const [isTTSEnabled, setIsTTSEnabled] = useState(true);
 
+    // ✅ 1. 新增：创建一个 Ref 来存储 TTS 状态
+  const isTTSRef = useRef(isTTSEnabled);
+
+
   const [showStartInterviewBtn, setShowStartInterviewBtn] = useState(false);
 
   // --- Hook ---
@@ -67,11 +71,14 @@ export default function Home() {
   }, []);
 
   // ✅ 新增：监听开关变化，如果关闭则立即停止播放
+  // ✅ 2. 修改：当开关变化时，同步更新 Ref，并决定是否停止播放
   useEffect(() => {
+    isTTSRef.current = isTTSEnabled; // 实时更新 Ref
     if (!isTTSEnabled) {
-        stopAudio();
+        stopAudio(); // 如果关闭，立即停止当前声音并清空队列
     }
   }, [isTTSEnabled, stopAudio]);
+
 
   // --- 解锁音频 ---
   const unlockAudioContext = () => {
@@ -163,7 +170,7 @@ export default function Home() {
   };
 
   // --- 5. 流式读取与分句 TTS (修复语法与逻辑) ---
-  const readStream = async (res: Response, enableTTS: boolean) => {
+  const readStream = async (res: Response, _ignore: boolean) => {
       if (!res.body) return;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -250,10 +257,10 @@ export default function Home() {
                           }
 
                           // 3. TTS 处理 (仅针对 token)
-                          if (enableTTS && payload.type === 'token' && payload.content) {
-                              const text = payload.content;
+                          // 🟢 关键修改：这里检查 Ref 的实时值，而不是闭包里的旧变量
+                          if (isTTSRef.current && payload.type === 'token') {
+                              const text = payload.content || "";
                               bufferText += text;
-                              // 简单的分句检测
                               if (/[。！？\.\!\?\:\n]/.test(text)) {
                                   addToQueue(bufferText);
                                   bufferText = "";
@@ -271,7 +278,7 @@ export default function Home() {
           console.error("Stream reading failed:", err);
       } finally {
           // 播放剩余的 TTS 缓冲
-          if (enableTTS && bufferText.trim()) {
+          if (isTTSRef.current && bufferText.trim()) {
               addToQueue(bufferText);
           }
       }
