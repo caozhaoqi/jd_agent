@@ -19,6 +19,7 @@
     "react-dom": "19.2.0",
     "react-markdown": "^10.1.0",
     "react-media-recorder": "^1.7.2",
+    "react-syntax-highlighter": "^16.1.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

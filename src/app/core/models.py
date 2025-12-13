@@ -68,3 +68,20 @@ class ChatRequest(BaseModel):
 class AuthRequest(BaseModel):
     username: str
     password: str
+
+
+# 定义请求体
+class BlogQueryRequest(BaseModel):
+    question: str
+
+
+# 定义响应体
+class BlogQueryResponse(BaseModel):
+    answer: str
+    sources: List[str]
+
+
+# 定义响应模型
+class RAGResponse(BaseModel):
+    answer: str
+    sources: List[str]

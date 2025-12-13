@@ -56,8 +56,9 @@ class RAGEngine:
         logger.debug(f"✅ 已将 {len(docs)} 个片段存入向量库")
 
     def search(self, query: str, top_k: int = 3) -> List[str]:
+        # 🟢 修改这里：返回值不仅包含文本，还包含来源 metadata
         """
-        检索 (JD要求: 语义搜索)
+        检索并返回内容和元数据
         """
         if not self.vector_store:
             return []
@@ -65,10 +66,15 @@ class RAGEngine:
         # 相似度搜索
         docs_and_scores = self.vector_store.similarity_search_with_score(query, k=top_k)
 
-        # 可以在这里加入 Rerank (重排序) 逻辑
-        # ... Rerank code ...
+        results = []
+        for doc, score in docs_and_scores:
+            results.append({
+                "content": doc.page_content,
+                "source": doc.metadata.get("source", "未知来源"),  # 获取文件名
+                "score": score
+            })
 
-        return [doc.page_content for doc, score in docs_and_scores]
+        return results
 
 
 # 单例

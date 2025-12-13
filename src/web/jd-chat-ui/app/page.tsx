@@ -3,9 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 // 图标
-import { Volume2, VolumeX } from "lucide-react";
+import { Volume2, VolumeX, PanelRightOpen, PanelRightClose, Database } from "lucide-react";
 import dynamic from "next/dynamic";
-// 🟢 补上这一行！
 import clsx from "clsx";
 
 // 引入组件和 Hook
@@ -13,7 +12,6 @@ import Sidebar from "@/components/Sidebar";
 import MessageList from "@/components/MessageList";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
 import { Message, Session, ChatMode } from "@/types/chat";
-import { PanelRightOpen, PanelRightClose } from "lucide-react"; // 新图标
 import BrainDashboard, { DashboardState } from "@/components/BrainDashboard";
 
 const ChatInput = dynamic(() => import("@/components/ChatInput"), {
@@ -33,28 +31,26 @@ export default function Home() {
   // --- 状态 ---
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [mode, setMode] = useState<ChatMode>('guide');
+
+  // 🟢 修改 1: mode 类型扩展逻辑在实际使用中体现，默认 'guide'
+  // 实际上 ChatMode 类型定义需要在 @/types/chat 中包含 'rag'
+  const [mode, setMode] = useState<ChatMode | 'rag'>('guide');
+
   const [username, setUsername] = useState("Guest");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
- // ✅ Dashboard 状态
-  const [showDashboard, setShowDashboard] = useState(true); // 控制面板开关
+
+  const [showDashboard, setShowDashboard] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardState>({
     currentStep: "",
     userProfile: [],
     ragSources: []
   });
 
-  // ✅ 新增：全局 TTS 开关 (默认开启)
   const [isTTSEnabled, setIsTTSEnabled] = useState(true);
-
-    // ✅ 1. 新增：创建一个 Ref 来存储 TTS 状态
   const isTTSRef = useRef(isTTSEnabled);
-
-
   const [showStartInterviewBtn, setShowStartInterviewBtn] = useState(false);
 
-  // --- Hook ---
   const { addToQueue, stopAudio, unlockAudio } = useAudioQueue();
 
   // --- 初始化 ---
@@ -70,18 +66,16 @@ export default function Home() {
     fetchSessions(token);
   }, []);
 
-  // ✅ 新增：监听开关变化，如果关闭则立即停止播放
-  // ✅ 2. 修改：当开关变化时，同步更新 Ref，并决定是否停止播放
   useEffect(() => {
-    isTTSRef.current = isTTSEnabled; // 实时更新 Ref
+    isTTSRef.current = isTTSEnabled;
     if (!isTTSEnabled) {
-        stopAudio(); // 如果关闭，立即停止当前声音并清空队列
+        stopAudio();
     }
   }, [isTTSEnabled, stopAudio]);
 
 
-  // --- 解锁音频 ---
   const unlockAudioContext = () => {
+    // ... (保持原有代码)
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioContext) {
       const ctx = new AudioContext();
@@ -95,13 +89,11 @@ export default function Home() {
     }
   };
 
-  // --- 发送逻辑 ---
+  // 🟢 修改 2: 核心发送逻辑，增加 RAG 分支
   const handleSend = async (text: string) => {
     const msgToSend = text;
     if (!msgToSend?.trim() || isLoading) return;
 
-    // 2. ✅ 关键：用户点击瞬间，立即调用解锁
-    // 这会播放那段静音，激活浏览器的 Audio 权限
     unlockAudio();
 
     const token = localStorage.getItem("token");
@@ -113,44 +105,68 @@ export default function Home() {
     setMessages(prev => [...prev, { role: "user", content: msgToSend }]);
 
     try {
-        // 🟢 场景 A: 连续对话
-        if (currentSessionId) {
+        // 🟢 分支 A: 知识库问答 (RAG)
+        if (mode === 'rag') {
+            // 知识库问答通常不流式传输，或者流式逻辑不同，这里演示 JSON 响应
+            // 先放一个 loading 占位
+            setMessages(prev => [...prev, { role: "assistant", content: "🔍 正在检索知识库..." }]);
+
+            const res = await fetch("http://127.0.0.1:8000/api/v1/qa/knowledge-base", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ question: msgToSend }) // 注意字段名为 question
+            });
+
+           if (!res.ok) {
+                // 读取后端返回的具体错误信息
+                const errorText = await res.text();
+                console.error("🔴 后端报错详情:", errorText);
+                throw new Error(`RAG API Error: ${res.status} - ${errorText}`);
+            }
+
+            const data = await res.json();
+
+            // 格式化 RAG 返回结果 (回答 + 来源)
+            const formattedContent = formatRAGResponse(data);
+
+            // 更新最后一条消息
+            setMessages(prev => {
+                const newMsgs = [...prev];
+                newMsgs[newMsgs.length - 1] = {
+                    role: "assistant",
+                    content: formattedContent,
+                    isJson: true // 标记为 Markdown 渲染
+                };
+                return newMsgs;
+            });
+
+            // 如果开启语音，朗读答案部分
+            if (isTTSEnabled) {
+                addToQueue(data.answer);
+            }
+        }
+        // 🔵 分支 B: 连续对话 (Mock Interview)
+        else if (currentSessionId) {
             setMessages(prev => [...prev, { role: "assistant", content: "" }]);
             const res = await fetch("http://127.0.0.1:8000/api/v1/chat/stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ session_id: currentSessionId, content: msgToSend })
             });
-            // ✅ 修改：传入全局开关状态
             await readStream(res, isTTSEnabled);
         }
-        // 🔵 场景 B: 指南
+        // 🟡 分支 C: JD 分析指南
         else if (mode === 'guide') {
-//             const res = await fetch("http://127.0.0.1:8000/api/v1/generate-guide", {
-//                 method: "POST",
-//                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-//                 body: JSON.stringify({ jd_text: msgToSend })
-//             });
-//             const data = await res.json();
-
-            // ✅ 新代码：使用流式接口
-            // 1. 先创建一个空的 Assistant 消息占位
             setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-
             const res = await fetch("http://127.0.0.1:8000/api/v1/stream/generate-guide", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ jd_text: msgToSend })
             });
-
-            // 2. 调用 readStream 读取流 (Dashboard 数据会在这里被解析)
-            // 注意：生成指南时通常不需要 TTS 朗读全文，所以第二个参数传 false (或者 true 看你喜好)
             await readStream(res, false);
-
-            // 3. 结束后刷新侧边栏
             fetchSessions(token);
         }
-        // 🟣 场景 C: 模拟面试
+        // 🟣 分支 D: 开启新模拟面试
         else {
             setMessages(prev => [...prev, { role: "assistant", content: "" }]);
             const res = await fetch("http://127.0.0.1:8000/api/v1/stream/mock-interview", {
@@ -158,19 +174,36 @@ export default function Home() {
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                 body: JSON.stringify({ jd_text: msgToSend })
             });
-            // ✅ 修改：传入全局开关状态
             await readStream(res, isTTSEnabled);
             fetchSessions(token);
         }
     } catch (e) {
-        setMessages(prev => [...prev, { role: "assistant", content: "❌ 请求失败，请检查网络。" }]);
+        console.error(e);
+        setMessages(prev => {
+            // 如果是 loading 占位，替换掉
+            const newMsgs = [...prev];
+            if (newMsgs[newMsgs.length - 1].role === "assistant") {
+                 newMsgs[newMsgs.length - 1] = { role: "assistant", content: "❌ 请求失败，请检查网络或后端服务。" };
+                 return newMsgs;
+            }
+            return [...prev, { role: "assistant", content: "❌ 请求失败。" }];
+        });
     } finally {
         setIsLoading(false);
     }
   };
 
-  // --- 5. 流式读取与分句 TTS (修复语法与逻辑) ---
+  // 🟢 新增辅助函数: 格式化 RAG 响应
+  const formatRAGResponse = (data: { answer: string; sources: string[] }) => {
+    const { answer, sources } = data;
+    if (!sources || sources.length === 0) return answer;
+    const sourceList = sources.map((s) => `- 📄 ${s}`).join("\n");
+    return `${answer}\n\n---\n**📚 引用来源:**\n${sourceList}`;
+  };
+
+  // --- 流式读取 (保持不变) ---
   const readStream = async (res: Response, _ignore: boolean) => {
+      // ... (代码与你提供的一致，此处省略以节省篇幅，逻辑不需要变)
       if (!res.body) return;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -191,10 +224,7 @@ export default function Home() {
                       if (!dataStr) continue;
 
                       try {
-                          // 尝试解析 JSON
                           const payload = JSON.parse(dataStr);
-
-                          // 1. 更新消息 UI (思考流 / 结果 / Token)
                           setMessages(prev => {
                               if (prev.length === 0) return prev;
                               const newMsgs = [...prev];
@@ -202,50 +232,30 @@ export default function Home() {
                               const lastMsg = newMsgs[lastIndex];
 
                               if (lastMsg.role === "assistant") {
-                                  // A. 思考流 (Thought)
                                   if (payload.type === 'thought') {
                                       const currentThoughts = lastMsg.thoughts || [];
-                                      // 简单去重
                                       if (currentThoughts[currentThoughts.length - 1] !== payload.content) {
-                                          newMsgs[lastIndex] = {
-                                              ...lastMsg,
-                                              thoughts: [...currentThoughts, payload.content]
-                                          };
+                                          newMsgs[lastIndex] = { ...lastMsg, thoughts: [...currentThoughts, payload.content] };
                                       }
                                   }
-                                  // B. 最终结果 (Result) -> 转 Markdown
                                   else if (payload.type === 'result') {
                                       try {
                                           const reportData = JSON.parse(payload.content);
                                           const markdown = formatReportToMarkdown(reportData);
-
-                                          newMsgs[lastIndex] = {
-                                              ...lastMsg,
-                                              content: markdown,
-                                              isJson: true
-                                          };
-
-                                          // 如果有 session_id，显示开始面试按钮
+                                          newMsgs[lastIndex] = { ...lastMsg, content: markdown, isJson: true };
                                           if (reportData.session_id) {
                                               setCurrentSessionId(reportData.session_id);
                                               setShowStartInterviewBtn(true);
                                           }
-                                      } catch (e) {
-                                          console.error("Report Parse Error", e);
-                                      }
+                                      } catch (e) { console.error("Report Parse Error", e); }
                                   }
-                                  // C. 普通内容流 (Token)
                                   else if (payload.type === 'token') {
-                                      newMsgs[lastIndex] = {
-                                          ...lastMsg,
-                                          content: lastMsg.content + (payload.content || "")
-                                      };
+                                      newMsgs[lastIndex] = { ...lastMsg, content: lastMsg.content + (payload.content || "") };
                                   }
                               }
                               return newMsgs;
                           });
 
-                          // 2. 更新 Dashboard (Data)
                           if (payload.type === 'data') {
                               const { key, value } = payload;
                               setDashboardData(prev => {
@@ -256,8 +266,6 @@ export default function Home() {
                               });
                           }
 
-                          // 3. TTS 处理 (仅针对 token)
-                          // 🟢 关键修改：这里检查 Ref 的实时值，而不是闭包里的旧变量
                           if (isTTSRef.current && payload.type === 'token') {
                               const text = payload.content || "";
                               bufferText += text;
@@ -266,21 +274,12 @@ export default function Home() {
                                   bufferText = "";
                               }
                           }
-
-                      } catch (e) {
-                          // 兼容非 JSON 的纯文本流 (如果有的话)
-                          console.warn("Stream parse error or plain text:", e);
-                      }
+                      } catch (e) { console.warn("Stream parse error:", e); }
                   }
               }
           }
-      } catch (err) {
-          console.error("Stream reading failed:", err);
-      } finally {
-          // 播放剩余的 TTS 缓冲
-          if (isTTSRef.current && bufferText.trim()) {
-              addToQueue(bufferText);
-          }
+      } catch (err) { console.error("Stream failed:", err); } finally {
+          if (isTTSRef.current && bufferText.trim()) addToQueue(bufferText);
       }
   };
 
@@ -300,11 +299,13 @@ export default function Home() {
       if (res.ok) setSessions(await res.json());
     } catch (e) { console.error(e); }
   };
+
   const loadSession = async (id: number) => {
-      /* 保持之前的代码 */
       const token = localStorage.getItem("token");
       if (!token) return;
       setCurrentSessionId(id);
+      // 加载旧会话时，退出 RAG 模式，进入 mock 模式
+      setMode('mock');
       stopAudio();
       setIsLoading(true);
       try {
@@ -321,46 +322,84 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-[#f9fafb] text-gray-800 font-sans overflow-hidden">
       <Sidebar
-        username={username} sessions={sessions} currentSessionId={currentSessionId} mode={mode} setMode={setMode}
+        username={username}
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        mode={mode as ChatMode} // 类型断言适配 Sidebar
+        setMode={(m) => {
+            setMode(m);
+            // 切换模式时清空上下文
+            if(m !== 'mock') setCurrentSessionId(null);
+            setMessages([]);
+        }}
         onNewChat={() => { setCurrentSessionId(null); setMessages([]); stopAudio(); setShowStartInterviewBtn(false); }}
-        onLoadSession={loadSession} onLogout={handleLogout}
+        onLoadSession={loadSession}
+        onLogout={handleLogout}
       />
 
       <div className="flex-1 flex flex-col h-full bg-white min-w-0 relative">
 
-        {/* --- Header (顶部工具栏) --- */}
+        {/* --- Header --- */}
         <div className="h-14 border-b flex items-center justify-between px-4 flex-shrink-0">
             <div className="flex items-center gap-3">
                 <span className="font-bold text-lg text-gray-800">
-                    {currentSessionId ? `会话 #${currentSessionId}` : '新会话'}
+                    {currentSessionId ? `会话 #${currentSessionId}` : (mode === 'rag' ? '知识库问答' : '新会话')}
                 </span>
-                <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium", mode === 'mock' ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700")}>
-                    {mode === 'guide' ? 'JD 分析模式' : '模拟面试模式'}
+                {/* 状态标签 */}
+                <span className={clsx(
+                    "text-xs px-2 py-0.5 rounded-full font-medium",
+                    mode === 'mock' ? "bg-purple-100 text-purple-700" :
+                    mode === 'rag' ? "bg-orange-100 text-orange-700" :
+                    "bg-blue-100 text-blue-700"
+                )}>
+                    {mode === 'guide' ? 'JD 分析模式' : mode === 'rag' ? '知识库检索' : '模拟面试模式'}
                 </span>
             </div>
 
-            {/* ✅ 语音开关按钮 */}
-            <button
-                onClick={() => setIsTTSEnabled(!isTTSEnabled)}
-                className={clsx(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all border",
-                    isTTSEnabled
-                        ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                        : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
-                )}
-                title={isTTSEnabled ? "点击关闭语音播报" : "点击开启语音播报"}
-            >
-                {isTTSEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                <span className="hidden sm:inline">{isTTSEnabled ? "语音开" : "语音关"}</span>
-            </button>
-            {/* ✅ Dashboard 开关 */}
-               <button
-                   onClick={() => setShowDashboard(!showDashboard)}
-                   className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
-                   title="切换大脑视图"
-               >
-                   {showDashboard ? <PanelRightClose size={20}/> : <PanelRightOpen size={20}/>}
-               </button>
+            <div className="flex items-center gap-2">
+                {/* 🟢 修改 3: 知识库切换按钮 */}
+                <button
+                    onClick={() => {
+                        if (mode === 'rag') setMode('guide'); // 切回默认
+                        else {
+                            setMode('rag');
+                            setCurrentSessionId(null);
+                            setMessages([{ role: "assistant", content: "📚 已切换到**知识库模式**。请问我任何关于技术栈或博客的问题。" }]);
+                        }
+                    }}
+                    className={clsx(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all border",
+                        mode === 'rag'
+                            ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                            : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
+                    )}
+                    title="切换知识库问答模式"
+                >
+                    <Database size={16} />
+                    <span className="hidden sm:inline">查知识库</span>
+                </button>
+
+                {/* 语音开关 */}
+                <button
+                    onClick={() => setIsTTSEnabled(!isTTSEnabled)}
+                    className={clsx(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all border",
+                        isTTSEnabled
+                            ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                            : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
+                    )}
+                >
+                    {isTTSEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                </button>
+
+                {/* Dashboard 开关 */}
+                <button
+                    onClick={() => setShowDashboard(!showDashboard)}
+                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+                >
+                    {showDashboard ? <PanelRightClose size={20}/> : <PanelRightOpen size={20}/>}
+                </button>
+            </div>
         </div>
 
         <MessageList
@@ -368,12 +407,18 @@ export default function Home() {
             showStartInterviewBtn={showStartInterviewBtn} onStartMockInterview={startMockInterview}
         />
 
+        {/* 🟢 修改 4: 输入框 Placeholder 动态变化 */}
         <ChatInput
-          mode={mode} isLoading={isLoading} onSend={handleSend}
-          onFileUpload={()=>{}} onAudioUpload={(blob) => { /* ASR */ }}
+          mode={mode as ChatMode}
+          isLoading={isLoading}
+          onSend={handleSend}
+          onFileUpload={()=>{}}
+          onAudioUpload={(blob) => { /* ASR */ }}
+          placeholder={mode === 'rag' ? "请输入问题查询知识库..." : undefined}
         />
       </div>
-       {/* ✅ 右侧仪表盘 (动画滑入) */}
+
+      {/* 右侧仪表盘 */}
       <div className={clsx(
           "bg-[#fcfdfd] border-l border-gray-200 transition-all duration-300 ease-in-out flex flex-col",
           showDashboard ? "w-[300px] translate-x-0" : "w-0 translate-x-full overflow-hidden border-none"

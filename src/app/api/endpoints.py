@@ -11,19 +11,22 @@ from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import json  # 记得导入 json
+
+from app.chains.rag_chain import ask_knowledge_base
 # 确保导入了必要的工具
 from app.core.stream_manager import init_stream_queue
-
 
 # --- 内部模块导入 ---
 # 1. 数据库与鉴权
 from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
-from app.core.models import User, ChatSession, ChatMessage, UserProfile, ChatRequest, AuthRequest
+from app.core.models import User, ChatSession, ChatMessage, UserProfile, ChatRequest, AuthRequest, BlogQueryRequest, \
+    BlogQueryResponse, RAGResponse
 from app.core.stream_manager import init_stream_queue
 from app.graph.workflow import app_graph
 
 # 2. Schema 数据模型
 from app.schemas.interview import JDRequest, InterviewReport
+from app.services.blog_service import chat_with_blog
 
 # 3. 业务服务逻辑
 from app.services.interview_service import generate_interview_guide
@@ -190,6 +193,7 @@ async def create_guide(
 
     return report
 
+
 # ==========================================
 # 5. 流式响应接口 (Streaming)
 # ==========================================
@@ -226,7 +230,6 @@ async def stream_mock_interview(request: JDRequest):
         run_mock_interview_stream(request.jd_text, rounds=3),
         media_type="text/event-stream"
     )
-
 
 
 @router.post("/chat/stream")
@@ -660,3 +663,31 @@ async def get_livekit_token(user: User = Depends(get_current_user)):
     token.add_grant(grant)
 
     return {"token": token.to_jwt(), "url": os.getenv("LIVEKIT_URL")}
+
+
+@router.post("/qa/knowledge-base", response_model=RAGResponse)
+async def query_knowledge_base(question: str):
+    """
+    RAG 接口：基于本地知识库回答问题，并返回引用来源
+    """
+    try:
+        result = await ask_knowledge_base(question)
+        return RAGResponse(
+            answer=result["answer"],
+            sources=result["sources"]
+        )
+    except ValueError as e:
+        return RAGResponse(answer=str(e), sources=[])
+
+
+@router.post("/blog/chat", response_model=BlogQueryResponse)
+async def chat_blog(request: BlogQueryRequest):
+    """
+    查询博客知识库接口
+    """
+    result = await chat_with_blog(request.question)
+
+    return BlogQueryResponse(
+        answer=result["answer"],
+        sources=result["sources"]
+    )
