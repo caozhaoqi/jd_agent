@@ -3,8 +3,8 @@ import { useState, useRef, useEffect } from "react";
 import { Message, ChatMode } from "@/types/chat";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
 
-// 定义后端 API 基础路径
-export const API_BASE = "http://127.0.0.1:8000/api/v1";
+// 定义后端 API 基础路径，使用相对路径通过Next.js代理转发
+export const API_BASE = "/api/v1";
 
 interface UseChatProps {
   token: string | null;

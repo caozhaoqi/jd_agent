@@ -44,7 +44,8 @@ app = FastAPI(
 # CORS 配置
 origins = [
     "http://localhost",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    "http://localhost:3001"
 ]
 
 app.add_middleware(

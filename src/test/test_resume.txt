@@ -1,0 +1,5 @@
+张三
+软件工程硕士
+5年Python开发经验
+熟悉FastAPI、SQLAlchemy等框架
+参与过多个大型项目开发

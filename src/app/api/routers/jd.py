@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_user
+from loguru import logger
 # 导入你需要的 schema 和 service
 from app.schemas.interview import JDRequest, InterviewReport
 from app.services.interview_service import generate_interview_guide
@@ -24,14 +25,14 @@ import json  # 记得导入 json
 
 from app.chains.rag_chain import ask_knowledge_base
 # 确保导入了必要的工具
-from app.core.stream_manager import init_stream_queue
+from app.core.stream_manager import init_stream_queue, clear_queue
 
 # --- 内部模块导入 ---
 # 1. 数据库与鉴权
 from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from app.core.models import User, ChatSession, ChatMessage, UserProfile, ChatRequest, AuthRequest, BlogQueryRequest, \
     BlogQueryResponse, RAGResponse
-from app.core.stream_manager import init_stream_queue
+from app.core.stream_manager import init_stream_queue, clear_queue
 from app.graph.workflow import app_graph
 
 # 2. Schema 数据模型
@@ -45,6 +46,7 @@ from app.services.mock_service import run_mock_interview_stream
 
 # 4. 核心工具与链
 from app.core.llm_factory import get_llm
+from app.core.sse_manager import sse_manager
 from app.utils.file_parser import parse_resume_file
 from app.chains.resume_extractor import extract_resume_features
 
@@ -55,42 +57,129 @@ router = APIRouter()
 # 2. 将原 endpoints.py 中 JD 相关的接口移过来
 # 注意：把 @app.post 改为 @router.post
 
-@router.post("/generate-guide", response_model=InterviewReport)
+@router.post("/generate-guide")
 async def create_guide(
         request: JDRequest,
         background_tasks: BackgroundTasks,
         user: User = Depends(get_current_user),
         db: Session = Depends(get_session),
 ):
-    # 1. 生成报告
-    report = await generate_interview_guide(request, db, user.id)
+    """
+    流式生成面试指南 (适配 DeepSeek 思考 UI)
+    """
+    thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
+    
+    async def generate_and_stream():
+        try:
+            # 获取队列
+            from app.core.stream_manager import get_stream_queue
+            
+            # 创建一个队列用于收集所有需要发送的消息
+            message_queue = asyncio.Queue()
+            
+            # 定义一个协程来处理消息队列并发送到前端
+            async def send_messages():
+                while True:
+                    msg = await message_queue.get()
+                    if msg is None:  # 结束信号
+                        break
+                    yield msg
+            
+            # 定义一个协程来处理 stream_manager 队列中的消息
+            async def process_stream_queue():
+                queue = get_stream_queue(thread_id)
+                if not queue:
+                    return
+                
+                try:
+                    while True:
+                        msg = await queue.get()
+                        if msg is None:  # 结束信号
+                            break
+                        # 将消息添加到消息队列
+                        payload = json.dumps(msg, ensure_ascii=False)
+                        await message_queue.put(f"data: {payload}\n\n")
+                except Exception as e:
+                    logger.error(f"❌ [Queue Error] {e}")
+                    # 发送错误信息
+                    error_payload = json.dumps({"type": "error", "content": str(e)}, ensure_ascii=False)
+                    await message_queue.put(f"data: {error_payload}\n\n")
+            
+            # 定义一个协程来生成报告
+            async def generate_report():
+                report = await generate_interview_guide(request, db, user.id)
+                
+                # 存库
+                try:
+                    title = f"{report.meta.company_name} 面试准备" if report.meta.company_name else "岗位 JD 分析"
+                    new_session = ChatSession(title=title, user_id=user.id)
+                    db.add(new_session)
+                    db.commit()
+                    db.refresh(new_session)
 
-    # 2. 存库
-    try:
-        title = f"{report.meta.company_name} 面试准备" if report.meta.company_name else "岗位 JD 分析"
-        new_session = ChatSession(title=title, user_id=user.id)
-        db.add(new_session)
-        db.commit()
-        db.refresh(new_session)
+                    # 保存消息记录
+                    db.add(ChatMessage(session_id=new_session.id, role="user", content=request.jd_text))
+                    db.add(ChatMessage(session_id=new_session.id, role="assistant", content=report.model_dump_json()))
+                    db.commit()
 
-        # 保存消息记录
-        db.add(ChatMessage(session_id=new_session.id, role="user", content=request.jd_text))
-        db.add(ChatMessage(session_id=new_session.id, role="assistant", content=report.model_dump_json()))
-        db.commit()
-
-        # ✅ 关键修改：把 ID 塞回报告里，传给前端
-        report.session_id = new_session.id
-
-    except Exception as e:
-        logger.error(f"❌ [DB Error] {e}")
-
-    # 3. 更新长期记忆
-    background_tasks.add_task(update_long_term_memory, db, user.id, f"User上传了JD: {request.jd_text}")
-
-    return report
+                    # ✅ 关键修改：把 ID 塞回报告里，传给前端
+                    report.session_id = new_session.id
+                except Exception as e:
+                    logger.error(f"❌ [DB Error] {e}")
+                
+                # 更新长期记忆
+                background_tasks.add_task(update_long_term_memory, db, user.id, f"User上传了JD: {request.jd_text}")
+                
+                return report
+            
+            # 并行运行所有协程
+            report_task = asyncio.create_task(generate_report())
+            queue_task = asyncio.create_task(process_stream_queue())
+            
+            # 实时发送消息队列中的内容
+            while True:
+                # 检查报告和队列任务是否都完成
+                if report_task.done() and queue_task.done():
+                    break
+                
+                try:
+                    # 非阻塞地获取消息，如果没有消息则继续循环
+                    msg = await asyncio.wait_for(message_queue.get(), timeout=0.1)
+                    if msg is not None:
+                        yield msg
+                except asyncio.TimeoutError:
+                    # 没有消息，继续循环
+                    continue
+            
+            # 等待报告生成完成
+            report = await report_task
+            
+            # 发送最终结果
+            result_payload = json.dumps({
+                "type": "result",
+                "content": report.model_dump()
+            }, ensure_ascii=False)
+            yield f"data: {result_payload}\n\n"
+            
+            # 发送结束信号
+            yield f"data: [DONE]\n\n"
+            
+        finally:
+            # 清除队列
+            clear_queue(thread_id)
+    
+    return StreamingResponse(
+        generate_and_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @router.post("/stream/system-design")
-async def stream_system_design(tech_stack: str, topic: str):
+async def stream_system_design(tech_stack: str, topic: str, user: User = Depends(get_current_user)):
     """
     流式生成系统设计题答案 (打字机效果)
     """
@@ -103,11 +192,34 @@ async def stream_system_design(tech_stack: str, topic: str):
     chain = prompt | llm | StrOutputParser()
 
     async def generate_stream():
-        async for chunk in chain.astream({"tech_stack": tech_stack, "topic": topic}):
-            yield f"data: {chunk}\n\n"
-        yield "data: [DONE]\n\n"
+        # 创建SSE连接
+        client_id, send_queue = await sse_manager.add_connection()
+        
+        try:
+            async for chunk in chain.astream({"tech_stack": tech_stack, "topic": topic}):
+                # 发送数据到客户端
+                await send_queue.put(f"data: {chunk}\n\n")
+                # 直接yield数据，保持兼容
+                yield f"data: {chunk}\n\n"
+            
+            # 发送结束信号
+            await send_queue.put("data: [DONE]\n\n")
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"Stream generation error: {e}")
+            # 发送错误信号
+            await send_queue.put(f"data: [ERROR]\n\n")
+            yield f"data: [ERROR]\n\n"
+        finally:
+            # 确保连接被移除
+            await sse_manager.remove_connection(client_id)
 
     return StreamingResponse(
         generate_stream(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
     )

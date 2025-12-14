@@ -14,11 +14,6 @@ async def generate_interview_guide(request: JDRequest, db: Session, user_id: int
     # 1. 获取记忆
     ltm_profile = get_user_profile_str(db, user_id)
 
-    # ✅ 埋点：发送用户画像 (假设 ltm_profile 是字符串，我们转成列表 tag)
-    # 简单处理：按换行符切分，或者让 get_user_profile 返回 list
-    tags = [line.strip("- ") for line in ltm_profile.split("\n") if line.strip()]
-    await send_data("user_profile", tags)
-
     # 1. 准备初始状态
     initial_state = {
         "jd_text": request.jd_text,
@@ -32,16 +27,28 @@ async def generate_interview_guide(request: JDRequest, db: Session, user_id: int
     # 2. 运行 Graph
     thread_id = f"user_{user_id}_job_{hash(request.jd_text)}"
     config = {"configurable": {"thread_id": thread_id}}
+    
+    # ✅ 初始化队列
+    queue = init_stream_queue(thread_id=thread_id)
+    
+    # ✅ 埋点：发送用户画像，传递thread_id
+    tags = [line.strip("- ") for line in ltm_profile.split("\n") if line.strip()]
+    await send_data("user_profile", tags, thread_id)
 
     # 运行到结束（或者暂停点）
     final_state = None
     async for event in app_graph.astream(initial_state, config=config):
-        # 这里可以加日志看进度
+        # 记录事件日志
+        logger.debug(f"📊 [Graph Event] {event}")
+        # 事件处理逻辑可以在这里添加
         pass
 
     # 获取最终状态快照
     snapshot = app_graph.get_state(config)
     final_state = snapshot.values
+    
+    # 发送结束信号到队列
+    await send_done(thread_id)
 
     # 3. 检查是否需要人工介入
     if snapshot.next and snapshot.next[0] == "human_node":

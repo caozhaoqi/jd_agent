@@ -1,6 +1,8 @@
+from typing import List, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from app.core.graph_state import AgentState
+from loguru import logger
 
 # ✅ 核心修复：显式导入所有节点函数
 from app.graph.nodes import (
@@ -11,6 +13,40 @@ from app.graph.nodes import (
     reviewer_node,
     human_approval_node
 )
+
+
+# --- 动态智能体组合逻辑 ---
+def evaluate_jd_complexity(state: AgentState) -> str:
+    """
+    评估JD的复杂度等级
+    - 根据技术栈数量、要求年限和JD长度判断
+    """
+    tech_stack_len = len(state.get("tech_stack", []))
+    years_required = state.get("years_required", "0-1")
+    jd_len = len(state.get("jd_text", ""))
+    
+    # 复杂度评估规则
+    if tech_stack_len > 8 or "5-10" in years_required or jd_len > 3000:
+        return "high"
+    elif tech_stack_len > 4 or "3-5" in years_required or jd_len > 1500:
+        return "medium"
+    else:
+        return "low"
+
+
+def select_agents(complexity: str) -> List[str]:
+    """
+    根据JD复杂度动态选择智能体组合
+    - 高复杂度：完整智能体团队
+    - 中复杂度：核心智能体团队
+    - 低复杂度：简化智能体团队
+    """
+    agent_sets = {
+        "high": ["parser", "researcher", "tech_lead", "hr_agent", "reviewer"],
+        "medium": ["parser", "tech_lead", "hr_agent", "reviewer"],
+        "low": ["parser", "tech_lead", "reviewer"]
+    }
+    return agent_sets.get(complexity, agent_sets["medium"])
 
 
 # --- 路由逻辑 ---
@@ -62,14 +98,30 @@ workflow.add_node("human_node", human_approval_node)
 # 1. Start -> Parser
 workflow.set_entry_point("parser")
 
-# 2. Parser -> 并行执行
-workflow.add_edge("parser", "tech_lead")
-workflow.add_edge("parser", "hr_agent")
-workflow.add_edge("parser", "researcher")
+# 2. Parser -> 根据激活的智能体进行条件路由
+# 检查活跃智能体并返回相应的节点名
+def route_agents(state: AgentState) -> Optional[str]:
+    active_agents = state.get("active_agents", [])
+    if "researcher" in active_agents:
+        return "researcher"
+    if "hr_agent" in active_agents:
+        return "hr_agent"
+    return None
 
-# 3. 分支汇聚
-workflow.add_edge("hr_agent", END)
-workflow.add_edge("researcher", END)
+# 添加条件边，根据活跃智能体选择路由
+workflow.add_conditional_edges(
+    "parser",
+    route_agents,
+    {
+        "researcher": "researcher",
+        "hr_agent": "hr_agent",
+        None: "tech_lead"  # 没有匹配智能体时直接进入tech_lead
+    }
+)
+
+# 3. 分支汇聚 - 确保所有路径最终都经过tech_lead和reviewer
+workflow.add_edge("hr_agent", "tech_lead")
+workflow.add_edge("researcher", "tech_lead")
 
 # 4. 质量控制循环
 workflow.add_edge("tech_lead", "reviewer")

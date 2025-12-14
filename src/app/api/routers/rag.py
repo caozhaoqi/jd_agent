@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.core.error_handler import raise_bad_request, raise_internal_error, raise_not_found
 from pydantic import BaseModel
 from typing import List
 from app.chains.rag_chain import ask_knowledge_base
-from app.core.models import RAGResponse, RAGRequest
+from app.core.models import RAGResponse, RAGRequest, User
+from app.api.deps import get_current_user
 
 router = APIRouter()
 

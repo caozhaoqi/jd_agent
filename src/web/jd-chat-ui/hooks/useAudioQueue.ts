@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
-import { API_BASE } from "@/hooks/useChat";
+// 使用相对路径的API_BASE，通过Next.js代理转发
+export const API_BASE = "/api/v1";
 
 interface AudioQueueStatus {
   isPlaying: boolean;

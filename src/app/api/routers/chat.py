@@ -11,6 +11,7 @@ from app.api.deps import get_current_user, get_session
 from app.core.models import User, ChatSession, ChatMessage, ChatRequest
 from app.core.llm_factory import get_llm
 from app.core.stream_manager import init_stream_queue
+from app.core.sse_manager import sse_manager
 
 router = APIRouter()
 
@@ -31,6 +32,7 @@ def get_messages(session_id: int, user: User = Depends(get_current_user), sessio
 @router.post("/stream")
 async def stream_chat(
         req: ChatRequest,
+        user: User = Depends(get_current_user),
         db: Session = Depends(get_session)
 ):
     """
@@ -84,46 +86,66 @@ async def stream_chat(
 
     # 6. 流式生成 (升级版：支持 JSON 事件流)
     async def generate_and_stream():
-        # --- A. 发送思考过程 (Thought) ---
-        # 即使是普通对话，发送一个思考状态也能让 UI 看起来更高级，且保持格式一致
-        thought_payload = json.dumps({
-            "type": "thought",
-            "content": "正在分析上下文与面试意图..."
-        }, ensure_ascii=False)
-        yield f"data: {thought_payload}\n\n"
-
-        # 稍微停顿一下让用户看到思考动画 (可选)
-        await asyncio.sleep(0.5)
-
-        # --- B. 发送内容流 (Token) ---
-        full_response = ""
+        # 创建SSE连接
+        client_id, send_queue = await sse_manager.add_connection()
+        
         try:
-            async for chunk in chain.astream(lc_messages):
-                full_response += chunk
-                # ✅ 关键修改：包装为 JSON 格式，匹配前端 readStream 的解析逻辑
-                token_payload = json.dumps({
-                    "type": "token",
-                    "content": chunk
-                }, ensure_ascii=False)
-                yield f"data: {token_payload}\n\n"
-        except Exception as e:
-            # 发送错误信息
-            err_payload = json.dumps({"type": "token", "content": f"\n[Error]: {str(e)}"})
-            yield f"data: {err_payload}\n\n"
+            # --- A. 发送思考过程 (Thought) ---
+            # 即使是普通对话，发送一个思考状态也能让 UI 看起来更高级，且保持格式一致
+            thought_payload = json.dumps({
+                "type": "thought",
+                "content": "正在分析上下文与面试意图..."
+            }, ensure_ascii=False)
+            
+            # 发送到SSE连接管理器和直接yield
+            await send_queue.put(f"data: {thought_payload}\n\n")
+            yield f"data: {thought_payload}\n\n"
 
-        # --- C. 存库逻辑 ---
-        try:
-            if full_response:
-                ai_msg = ChatMessage(session_id=req.session_id, role="assistant", content=full_response)
-                db.add(ai_msg)
-                db.commit()
-        except Exception as e:
-            print(f"Error saving AI response: {e}")
+            # 稍微停顿一下让用户看到思考动画 (可选)
+            await asyncio.sleep(0.5)
 
-        # --- D. 结束 ---
-        yield "data: [DONE]\n\n"
+            # --- B. 发送内容流 (Token) ---
+            full_response = ""
+            try:
+                async for chunk in chain.astream(lc_messages):
+                    full_response += chunk
+                    # ✅ 关键修改：包装为 JSON 格式，匹配前端 readStream 的解析逻辑
+                    token_payload = json.dumps({
+                        "type": "token",
+                        "content": chunk
+                    }, ensure_ascii=False)
+                    
+                    # 发送到SSE连接管理器和直接yield
+                    await send_queue.put(f"data: {token_payload}\n\n")
+                    yield f"data: {token_payload}\n\n"
+            except Exception as e:
+                # 发送错误信息
+                err_payload = json.dumps({"type": "token", "content": f"\n[Error]: {str(e)}"})
+                await send_queue.put(f"data: {err_payload}\n\n")
+                yield f"data: {err_payload}\n\n"
+
+            # --- C. 存库逻辑 ---
+            try:
+                if full_response:
+                    ai_msg = ChatMessage(session_id=req.session_id, role="assistant", content=full_response)
+                    db.add(ai_msg)
+                    db.commit()
+            except Exception as e:
+                print(f"Error saving AI response: {e}")
+
+            # --- D. 结束 ---
+            await send_queue.put("data: [DONE]\n\n")
+            yield "data: [DONE]\n\n"
+        finally:
+            # 确保连接被移除
+            await sse_manager.remove_connection(client_id)
 
     return StreamingResponse(
         generate_and_stream(),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
     )

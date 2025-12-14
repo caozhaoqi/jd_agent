@@ -85,15 +85,15 @@ async def stream_generate_guide(
     - type='intermediate': 中间处理步骤信息
     """
     try:
+        # 创建共享队列
+        shared_queue = asyncio.Queue()
+        
         # 测试用：模拟用户和数据库
         from app.core.models import User
         from sqlmodel import Session
         # 测试账户
         # user = User(id=1, username="test_user", email="test@example.com")
         # db = None
-
-        # 1. 初始化队列 (ContextVar 会自动绑定到当前 task)
-        queue = init_stream_queue()
 
         # 2. 定义后台运行任务
         async def run_graph_background():
@@ -109,8 +109,11 @@ async def stream_generate_guide(
 
                 thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
                 config = {"configurable": {"thread_id": thread_id}}
+                
+                # 将队列与thread_id关联
+                init_stream_queue(shared_queue, thread_id)
 
-                    # 运行 Graph
+                # 运行 Graph
                 final_state = await app_graph.ainvoke(initial_state, config=config)
 
                 # 运行结束，把最终结果构造成 token 类型发出去
@@ -168,14 +171,14 @@ async def stream_generate_guide(
                 except Exception as db_e:
                     logger.error(f"DB Error: {db_e}")
 
-                await queue.put({
+                await shared_queue.put({
                     "type": "result",  # 标记为最终结果
                     "content": json.dumps(final_report)
                 })
 
             except Exception as e:
                 logger.error(f"❌ [Graph Error] {e}")  # 打印错误堆栈
-                await queue.put({"type": "error", "content": {
+                await shared_queue.put({"type": "error", "content": {
                     "status": "error",
                     "code": ErrorCode.JD_PARSE_ERROR,
                     "message": "生成面试指南失败",
@@ -184,7 +187,7 @@ async def stream_generate_guide(
 
             finally:
                 # 发送结束信号
-                await queue.put(None)
+                await shared_queue.put(None)
 
         # 3. 启动后台任务
         task = asyncio.create_task(run_graph_background())
@@ -193,7 +196,7 @@ async def stream_generate_guide(
         async def event_generator():
             while True:
                 # 等待队列消息
-                data = await queue.get()
+                data = await shared_queue.get()
 
                 if data is None:  # 结束信号
                     yield "data: [DONE]\n\n"
@@ -227,7 +230,8 @@ async def stream_generate_guide(
 async def agent_feedback(
     thread_id: str, 
     feedback: str, 
-    action: str = "retry"
+    action: str = "retry",
+    user: User = Depends(get_current_user)
 ):
     """
     用户对 AI 暂停的任务进行干预

@@ -61,6 +61,19 @@ class Settings(BaseSettings):
     def effective_audio_base(self):
         return self.AUDIO_API_BASE or self.OPENAI_API_BASE
 
+    # --- Redis 配置 ---
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: Optional[str] = None
+    REDIS_URL: Optional[str] = None
+
+    @property
+    def effective_redis_url(self):
+        if self.REDIS_URL:
+            return self.REDIS_URL
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
     # --- Pydantic 配置 ---
     model_config = SettingsConfigDict(
         env_file=ENV_PATH,  # 指定读取的文件名

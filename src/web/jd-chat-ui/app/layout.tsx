@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css"; // <--- 🔴 必须有这一行！检查路径是否正确
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "JD Agent - AI 面试助手",
@@ -16,7 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh">
-      <body className={inter.className}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

@@ -29,3 +29,9 @@ class AgentState(TypedDict):
     human_feedback: Optional[str]  # 人工介入时的指令
     iteration_count: int  # 循环计数器
     error: Optional[str]  # 错误状态（用于错误处理和恢复）
+    
+    # --- 动态智能体组合字段 ---
+    agent_capabilities: Optional[dict]  # 智能体能力矩阵
+    active_agents: List[str]  # 当前激活的智能体
+    task_priority: Optional[str]  # 任务优先级
+    complexity_level: Optional[str]  # JD复杂度等级

@@ -49,3 +49,18 @@ def create_access_token(data: dict):
     expire = datetime.utcnow() + timedelta(minutes=60*24) # 1天过期
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_token(token: str) -> dict:
+    """
+    验证JWT令牌
+    - 返回令牌中的用户信息
+    - 令牌无效时抛出异常
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise ValueError("令牌已过期")
+    except jwt.InvalidTokenError:
+        raise ValueError("无效的令牌")

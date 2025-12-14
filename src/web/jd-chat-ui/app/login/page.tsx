@@ -30,7 +30,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     const endpoint = isLogin ? "/api/v1/auth/login" : "/api/v1/auth/register";
-    const API_URL = "http://127.0.0.1:8000" + endpoint;
+    const API_URL = endpoint;
 
     try {
         const res = await fetch(API_URL, {
