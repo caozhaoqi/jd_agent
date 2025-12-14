@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, 
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -20,7 +20,7 @@ from app.core.stream_manager import init_stream_queue
 # 1. 数据库与鉴权
 from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 from app.core.models import User, ChatSession, ChatMessage, UserProfile, ChatRequest, AuthRequest, BlogQueryRequest, \
-    BlogQueryResponse, RAGResponse
+    BlogQueryResponse, RAGResponse, TTSRequest
 from app.core.stream_manager import init_stream_queue
 from app.graph.workflow import app_graph
 
@@ -578,12 +578,13 @@ except Exception as e:
 
 
 @router.post("/audio/tts")
-async def text_to_speech(text: str):
+async def text_to_speech(request: TTSRequest):
     """
     跨平台 TTS 接口 (完全离线，零延迟)
     - macOS: 调用 'say' 命令 -> .m4a
     - Windows/Linux: 调用 pyttsx3 -> .wav
     """
+    text = request.text
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="文本为空")
 

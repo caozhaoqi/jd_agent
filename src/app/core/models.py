@@ -95,3 +95,9 @@ class RAGResponse(BaseModel):
 # --- 1. 定义请求体模型 (关键修复) ---
 class RAGRequest(BaseModel):
     question: str
+
+
+# 创建TTS请求模型
+class TTSRequest(BaseModel):
+    text: str = Field(..., description="待转换的文本")
+

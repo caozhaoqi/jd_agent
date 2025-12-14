@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from loguru import logger
 from app.core.config import settings
+from app.core.models import TTSRequest
 
 router = APIRouter()
 
@@ -60,7 +61,13 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
 
 @router.post("/audio/tts")
-async def text_to_speech(text: str):
+async def text_to_speech(request: TTSRequest):
+    """
+    跨平台 TTS 接口 (完全离线，零延迟)
+    - macOS: 调用 'say' 命令 -> .m4a
+    - Windows/Linux: 调用 pyttsx3 -> .wav
+    """
+    text = request.text
     """
     跨平台 TTS 接口 (完全离线，零延迟)
     - macOS: 调用 'say' 命令 -> .m4a

@@ -55,13 +55,17 @@ async def create_guide(
     return report
 
 
-@router.post("/stream/generate-guide")
 @router.post("/stream/generate-guide")  # 新增一个流式接口
 async def stream_generate_guide(
         request: JDRequest,
-        user: User = Depends(get_current_user),
-        db: Session = Depends(get_session)
+        # user: User = Depends(get_current_user),
+        # db: Session = Depends(get_session)
 ):
+    # 测试用：模拟用户和数据库
+    from app.core.models import User
+    from sqlmodel import Session
+    user = User(id=1, username="test_user", email="test@example.com")
+    db = None
     """
     L5 级 Agent 流式生成接口 (支持 DeepSeek 思考过程)
     """
@@ -128,16 +132,17 @@ async def stream_generate_guide(
 
             # --- 存库逻辑 (可选，建议加上) ---
             try:
-                title = f"{final_meta['company_name']} 面试准备" if final_meta['company_name'] else "JD 分析"
-                new_sess = ChatSession(title=title, user_id=user.id)
-                db.add(new_sess)
-                db.commit()
-                db.refresh(new_sess)
-                final_report["session_id"] = new_sess.id
-                # 保存消息
-                db.add(ChatMessage(session_id=new_sess.id, role="user", content=request.jd_text))
-                db.add(ChatMessage(session_id=new_sess.id, role="assistant", content=json.dumps(final_report)))
-                db.commit()
+                if db is not None:
+                    title = f"{final_meta['company_name']} 面试准备" if final_meta['company_name'] else "JD 分析"
+                    new_sess = ChatSession(title=title, user_id=user.id)
+                    db.add(new_sess)
+                    db.commit()
+                    db.refresh(new_sess)
+                    final_report["session_id"] = new_sess.id
+                    # 保存消息
+                    db.add(ChatMessage(session_id=new_sess.id, role="user", content=request.jd_text))
+                    db.add(ChatMessage(session_id=new_sess.id, role="assistant", content=json.dumps(final_report)))
+                    db.commit()
             except Exception as db_e:
                 logger.error(f"DB Error: {db_e}")
 

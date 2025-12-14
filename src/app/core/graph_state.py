@@ -28,3 +28,4 @@ class AgentState(TypedDict):
     review_comment: str  # AI 质检员的具体修改建议
     human_feedback: Optional[str]  # 人工介入时的指令
     iteration_count: int  # 循环计数器
+    error: Optional[str]  # 错误状态（用于错误处理和恢复）

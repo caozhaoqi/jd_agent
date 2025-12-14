@@ -15,17 +15,36 @@ from app.graph.nodes import (
 
 # --- 路由逻辑 ---
 def qa_router(state: AgentState):
-    # 1. 强制通过机制 (防止死循环)
-    if state["iteration_count"] > 3:
-        print("⚠️ [Router] 循环次数过多，强制通过")
-        return "approved"
+    """
+    质量控制路由逻辑
+    - 处理正常的质量评分
+    - 处理异常情况（如解析失败、网络错误等）
+    - 防止死循环
+    """
+    from loguru import logger
+    
+    try:
+        # 1. 强制通过机制 (防止死循环)
+        if state.get("iteration_count", 0) > 3:
+            logger.warning("⚠️ [Router] 循环次数过多，强制通过")
+            return "approved"
 
-    # 2. 只有分数高才通过
-    if state["quality_score"] >= 85:
-        return "approved"
+        # 2. 检查是否有错误状态
+        if state.get("error"):
+            logger.warning(f"⚠️ [Router] 检测到错误状态: {state['error']}")
+            return "human_review_needed"
 
-    # 3. 分数低 -> 进入人工介入环节
-    return "human_review_needed"
+        # 3. 只有分数高才通过
+        if state.get("quality_score", 0) >= 85:
+            return "approved"
+
+        # 4. 分数低 -> 进入人工介入环节
+        logger.debug(f"⚠️ [Router] 质量评分 {state.get('quality_score')} < 85，需要人工审核")
+        return "human_review_needed"
+    except Exception as e:
+        logger.error(f"❌ [Router] 路由逻辑错误: {e}")
+        # 异常情况下默认进入人工审核环节
+        return "human_review_needed"
 
 
 # --- 构建图 ---

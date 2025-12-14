@@ -10,9 +10,12 @@ from pydantic import BaseModel, Field
 from loguru import logger
 # ✅ 引入我们刚才写的工具
 from app.core.stream_manager import send_thought, send_data
+# ✅ 引入重试装饰器
+from app.core.retry import retry_async
 
 
 # --- Node 1: JD Parser ---
+@retry_async(max_retries=3, delay=0.5, backoff=1.5)
 async def jd_parser_node(state: AgentState):
     await send_thought("🔍 [Parser] 正在深度解析 JD...", "提取核心技术栈")
     # ✅ 触发 Dashboard 更新: 步骤高亮
@@ -32,6 +35,7 @@ async def jd_parser_node(state: AgentState):
 
 
 # --- Node 2: Researcher ---
+@retry_async(max_retries=3, delay=1.0, backoff=2.0)
 async def researcher_node(state: AgentState):
     company = state.get("company_name")
 
@@ -59,6 +63,7 @@ async def researcher_node(state: AgentState):
 
 
 # --- Node 3: Tech Lead ---
+@retry_async(max_retries=3, delay=1.0, backoff=2.0)
 async def tech_lead_node(state: AgentState):
     await send_thought("💻 [TechLead] 正在构思面试题...")
     # ✅ 触发 Dashboard 更新
@@ -72,6 +77,7 @@ async def tech_lead_node(state: AgentState):
 
 
 # --- Node 4: HR Agent ---
+@retry_async(max_retries=3, delay=1.0, backoff=2.0)
 async def hr_node(state: AgentState):
     logger.debug("👔 [Agent: HR] 正在生成行为面试题...")
     await send_thought("👔 HR 正在构建行为面试题", "结合 STAR 法则与企业文化")
@@ -89,6 +95,7 @@ class ReviewResult(BaseModel):
     comment: str = Field(description="具体的修改建议，如果满分则留空")
 
 
+@retry_async(max_retries=3, delay=1.0, backoff=2.0)
 async def reviewer_node(state: AgentState):
     logger.debug("⚖️ [Agent: QA] 正在审核题目质量...")
     await send_thought("⚖️ 质检员正在审核题目质量", "评估深度、准确性与匹配度")

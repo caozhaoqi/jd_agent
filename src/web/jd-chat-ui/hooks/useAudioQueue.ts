@@ -39,9 +39,13 @@ export function useAudioQueue() {
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/audio/tts?text=${encodeURIComponent(text!)}`, {
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/audio/tts`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ text: text! })
       });
 
       if (res.ok) {
@@ -68,6 +72,8 @@ export function useAudioQueue() {
 
             // 重新绑定结束事件
             audio.onended = () => {
+              // 清理资源
+              URL.revokeObjectURL(audio.src);
               isPlayingRef.current = false;
               processAudioQueue();
             };
@@ -77,13 +83,24 @@ export function useAudioQueue() {
               await audio.play();
             } catch (playError) {
               console.error("⚠️ TTS 播放被拦截，尝试继续队列:", playError);
+              // 播放失败时也清理资源
+              URL.revokeObjectURL(url);
               isPlayingRef.current = false;
               processAudioQueue();
             }
         } else {
              // 防御性代码：如果没有 audio 对象，新建一个（虽然很少见）
              const tempAudio = new Audio(url);
-             tempAudio.onended = () => { isPlayingRef.current = false; processAudioQueue(); };
+             tempAudio.onended = () => {
+               // 清理资源
+               URL.revokeObjectURL(tempAudio.src);
+               isPlayingRef.current = false;
+               processAudioQueue();
+             };
+             tempAudio.onerror = () => {
+               // 播放错误时清理资源
+               URL.revokeObjectURL(url);
+             };
              tempAudio.play();
         }
       } else {
