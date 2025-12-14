@@ -1,8 +1,10 @@
 import time
+import uuid
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from app.utils.logger import logger
+from app.schemas import ErrorResponse, ErrorCode
 
 
 class LogMiddleware(BaseHTTPMiddleware):
@@ -10,9 +12,13 @@ class LogMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         client_ip = request.client.host
         url_path = request.url.path
+        request_id = str(uuid.uuid4())
+
+        # 在请求头中添加请求ID
+        request.state.request_id = request_id
 
         # 1. 记录请求进入
-        logger.info(f"➡️ [REQ] {request.method} {url_path} | IP: {client_ip}")
+        logger.info(f"➡️ [REQ] {request.method} {url_path} | IP: {client_ip} | RequestID: {request_id}")
 
         try:
             # 执行实际的请求处理
@@ -22,16 +28,24 @@ class LogMiddleware(BaseHTTPMiddleware):
             process_time = (time.time() - start_time) * 1000
 
             # 3. 记录请求成功返回
-            logger.info(f"⬅️ [RES] {response.status_code} | Time: {process_time:.2f}ms")
+            logger.info(f"⬅️ [RES] {response.status_code} | Time: {process_time:.2f}ms | RequestID: {request_id}")
 
             return response
 
         except Exception as e:
             # 4. 全局异常捕获 (兜底)
             process_time = (time.time() - start_time) * 1000
-            logger.exception(f"❌ [ERR] Request Failed: {str(e)}")
+            logger.exception(f"❌ [ERR] Request Failed: {str(e)} | RequestID: {request_id}")
+
+            # 使用统一的错误响应格式
+            error_response = ErrorResponse(
+                code=ErrorCode.INTERNAL_SERVER_ERROR,
+                message="服务器内部错误",
+                details={"error": str(e)},
+                request_id=request_id,
+            )
 
             return JSONResponse(
                 status_code=500,
-                content={"detail": "Internal Server Error", "error": str(e)}
+                content=error_response.model_dump()
             )

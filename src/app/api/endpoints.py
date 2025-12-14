@@ -71,7 +71,9 @@ def register(req: AuthRequest, session: Session = Depends(get_session)):
     if session.exec(select(User).where(User.username == req.username)).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
 
-    user = User(username=req.username, hashed_password=get_password_hash(req.password))
+    # bcrypt limits password length to 72 bytes, truncate if necessary
+    truncated_password = req.password[:72]
+    user = User(username=req.username, hashed_password=get_password_hash(truncated_password))
     session.add(user)
     session.commit()
     return {"msg": "注册成功"}
