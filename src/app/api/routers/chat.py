@@ -28,7 +28,7 @@ def get_messages(session_id: int, user: User = Depends(get_current_user), sessio
     return chat.messages
 
 
-@router.post("/chat/stream")
+@router.post("/stream")
 async def stream_chat(
         req: ChatRequest,
         db: Session = Depends(get_session)

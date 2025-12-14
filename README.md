@@ -17,6 +17,7 @@
 - **🕵️ Researcher**: 自动联网 (Tavily) 搜索公司背景、财报与业务动态。
 - **💻 Tech Lead**: 基于 JD 技术栈构建硬核面试题。
 - **⚖️ Reviewer (质检员)**: 审核题目质量，评分低于 85 分自动打回重写 (Self-Correction)。
+- **👨‍💼 Human Approval Node**: 支持人工介入审核流程，提供交互式反馈和状态跟踪。
 - **🧠 Brain Dashboard**: 前端实时可视化 Agent 的思维路径、当前步骤与长期记忆。
 
 ### 🔊 2. 全双工语音交互 (Real-time Voice)
@@ -24,8 +25,12 @@
 - **👂 ASR (听)**: 集成 **SiliconFlow / Whisper**，实现秒级语音转文字。
 - **🗣️ TTS (说)**: 
     - **macOS**: 调用原生 `say` 命令，零延迟、零成本。
-    - **Windows/Linux**: 自动降级为 `pyttsx3` 或 `Edge-TTS`。
-- **⚡️ 音频队列 (Audio Queue)**: 前端实现分句缓冲与串行播放，解决流式生成导致的语音重叠问题。
+    - **Windows/Linux**: 使用 `pyttsx3` 并通过 `asyncio.to_thread()` 实现异步处理，避免主线程阻塞。
+    - **📱 跨平台兼容**: 自动将平台特定格式 (.m4a/.wav) 转换为统一 MP3 格式。
+- **⚡️ 增强型音频队列 (Audio Queue)**: 
+    - 分句缓冲与串行播放，解决流式生成导致的语音重叠问题。
+    - 支持加载状态、错误处理、暂停/恢复功能。
+    - 实时队列状态反馈（播放中、队列长度等）。
 
 ### 🎨 3. DeepSeek 风格交互 UI
 - **深度思考模式**: 实时展示 AI 的思考过程（Thinking Stream），缓解长推理时间的等待焦虑。
@@ -153,10 +158,10 @@ jd_agent/
 │   ├── app/
 │   │   ├── api/             # FastAPI 路由接口 (Stream, Auth, Audio)
 │   │   ├── chains/          # LangChain 原子能力 (Generator, Parser)
-│   │   ├── core/            # 核心配置 (Config, DB, LLM Factory)
-│   │   ├── graph/           # LangGraph 多智能体编排 (Nodes, Workflow)
+│   │   ├── core/            # 核心配置 (Config, DB, LLM Factory) & 统一错误处理
+│   │   ├── graph/           # LangGraph 多智能体编排 (Nodes, Workflow) - 含人工介入节点
 │   │   └── services/        # 业务逻辑层
-│   ├── components/          # Next.js UI 组件 (ChatInput, Dashboard)
+│   ├── components/          # Next.js UI 组件 (ChatInput, Dashboard, AudioQueue)
 │   └── prompts/             # Prompt YAML 模板管理
 ├── tests/                   # 测试用例
 └── requirements.txt         # 依赖列表
@@ -169,6 +174,11 @@ jd_agent/
 - [x] **v1.0**: JD 解析与题库生成 (RAG)
 - [x] **v2.0**: 长期记忆 (User Profile) 与 鉴权系统
 - [x] **v3.0**: L5 多智能体协同 & 全双工语音交互
+- [x] **v3.1**: 低优先级优化
+  - [x] TTS 异步处理 pyttsx3 调用，避免阻塞主线程
+  - [x] 完善多智能体工作流人工介入机制
+  - [x] 优化前端音频队列用户体验
+  - [x] 统一系统全局错误处理机制
 - [ ] **v4.0**: WebRTC 超低延迟通话 (打断式交互)
 - [ ] **v5.0**: 多模态简历分析 (支持图片/PDF 图表读取)
 

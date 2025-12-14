@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routers import auth, resume, chat, interview, audio, rag, webrtc
+from app.api.routers import auth, resume, chat, interview, audio, rag, webrtc, jd
 
 api_router = APIRouter()
 
@@ -10,3 +10,4 @@ api_router.include_router(interview.router, prefix="/interview", tags=["Intervie
 api_router.include_router(audio.router, prefix="/audio", tags=["Audio"])
 api_router.include_router(rag.router, prefix="/qa", tags=["RAG"])
 api_router.include_router(webrtc.router, prefix="/webrtc", tags=["WebRTC"])
+api_router.include_router(jd.router, prefix="/jd", tags=["JD"])

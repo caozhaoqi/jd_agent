@@ -1,4 +1,4 @@
-const eventSource = new EventSource("/api/v1/stream/system-design?tech_stack=Python&topic=秒杀系统");
+const eventSource = new EventSource("/api/v1/jd/stream/system-design?tech_stack=Python&topic=秒杀系统");
 
 eventSource.onmessage = function(event) {
     if (event.data === "[DONE]") {
