@@ -1,5 +1,7 @@
 import os
 
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain_community.document_compressors import FlashrankRerank
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import Chroma
@@ -9,6 +11,7 @@ from langchain_core.output_parsers import StrOutputParser
 from loguru import logger
 
 from app.core.config import settings
+from app.core.llm_factory import get_llm
 
 # 1. 初始化向量数据库连接
 DB_DIR = "/Users/caozhaoqi/PycharmProjects/JD_agent/src/app/blog/chroma_db"
@@ -18,7 +21,29 @@ embedding_model = HuggingFaceEmbeddings(model="shibing624/text2vec-base-chinese"
 if os.path.exists(DB_DIR):
     vectorstore = Chroma(persist_directory=DB_DIR, embedding_function=embedding_model)
     # search_kwargs={"k": 3} 表示每次只找最相关的 3 个片段
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    # 修改 retriever 的定义
+    retriever = vectorstore.as_retriever(
+        search_type="similarity_score_threshold",  # 启用阈值模式
+        search_kwargs={
+            "k": 5,  # 先捞 5 个
+            "score_threshold": 0.4  # 设定门槛 (注意：Chroma默认是距离，LangChain封装后通常转为相似度，需调试。0.4-0.6 是常用区间)
+        }
+    )
+    # 1. 定义基础检索器 (先多捞一点，比如 k=10)
+    base_retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
+
+    # 2. 定义重排序器 (Reranker)
+    compressor = FlashrankRerank(
+        model="ms-marco-MiniLM-L-12-v2",  # 轻量级模型，自动下载
+        top_n=3  # 最终只留前 3 名
+    )
+
+    # 3. 组合成新的检索器
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=compressor,
+        base_retriever=base_retriever
+    )
+
 else:
     retriever = None
 
@@ -86,7 +111,7 @@ def get_rag_chain():
     # 最终链：先检索，再把 docs 传给 rag_chain_from_docs，同时保留 docs 用于提取来源
     chain = (
         RunnableParallel(
-            {"docs": retriever, "question": RunnablePassthrough()}
+            {"docs": compression_retriever, "question": RunnablePassthrough()}  # 使用 compression_retriever
         )
         .assign(answer=rag_chain_from_docs)
         .pick(["answer", "docs"])
@@ -96,23 +121,54 @@ def get_rag_chain():
 
 
 # app/chains/rag_chain.py
-
 async def ask_knowledge_base(question: str):
+    # 🚀 优化步骤 1: 查询改写 (Query Rewriting)
+    # 目的：将用户的短词 (如 "unity") 扩写为语义更丰富的句子，提高检索准确率
+    rewrite_llm = get_llm(temperature=0.5)  # 给一点创造力
+    rewrite_prompt = ChatPromptTemplate.from_template(
+        """你是一个专业的搜索引擎优化助手。
+        请将用户的输入转换为一个更精准、语义更丰富的查询语句，以便在技术知识库中进行向量检索。
+
+        要求：
+        1. 补全相关的技术上下文（例如 "unity" -> "Unity3D 游戏引擎开发"）。
+        2. 如果是具体问题，保持原意但使其更书面化。
+        3. 仅输出改写后的查询语句，不要包含任何解释。
+
+        用户输入: {x}
+        改写后的查询:"""
+    )
+
+    rewrite_chain = rewrite_prompt | rewrite_llm | StrOutputParser()
+
+    # 获取改写后的问题
+    better_question = await rewrite_chain.ainvoke({"x": question})
+    logger.debug(f"🔄 [优化] 查询改写: '{question}' -> '{better_question}'")
+
+    # ---------------------------------------------------------
+
     chain = get_rag_chain()
 
-    # 调用链
-    result = await chain.ainvoke(question)
+    # 🚀 优化步骤 2: 使用改写后的问题进行检索和回答
+    # 注意：这里我们用 better_question 去检索文档，但 Prompt 里还是可以让 AI 知道原始问题
+    result = await chain.ainvoke(better_question)
 
     answer = result["answer"]
     source_docs = result["docs"]
 
     # --- 🛠️ 调试代码：打印检索到的内容 ---
-    logger.debug(f"\n🔍 [调试] 用户提问: {question}")
+    logger.debug(f"\n🔍 [调试] 最终检索关键词: {better_question}")
     logger.debug(f"📄 [调试] 检索到 {len(source_docs)} 个片段:")
+
     for i, doc in enumerate(source_docs):
-        logger.debug(f"--- 片段 {i + 1} (来源: {doc.metadata.get('source')}) ---")
-        # 只打印前 100 个字，防止刷屏
-        logger.debug(doc.page_content[:100].replace('\n', ' ') + "...")
+        # 获取文件名
+        source_name = doc.metadata.get('source', '未知来源')
+        # 获取相关性分数 (如果有的话，Chroma 默认 retriever 不直接返回分数，除非用 similarity_search_with_score)
+
+        logger.debug(f"--- 片段 {i + 1} (来源: {source_name}) ---")
+        # 打印内容预览，去除换行符以便查看
+        preview_content = doc.page_content[:150].replace('\n', ' ')
+        logger.debug(f"内容: {preview_content}...")
+
     logger.debug("--------------------------------------------------\n")
     # ------------------------------------
 
@@ -120,5 +176,7 @@ async def ask_knowledge_base(question: str):
 
     return {
         "answer": answer,
-        "sources": sources
+        "sources": sources,
+        "original_query": question,  # (可选) 返回原始问题
+        "rewritten_query": better_question  # (可选) 返回改写后的问题供前端展示
     }

@@ -134,3 +134,9 @@ npm install react-syntax-highlighter
 
 - FAISS
 - Chroma DB
+
+- rerank
+
+```shell
+pip install faiss-cpu flashrank
+```
