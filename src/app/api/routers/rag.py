@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from app.core.error_handler import raise_bad_request, raise_internal_error, raise_not_found
 from pydantic import BaseModel
 from typing import List
 from app.chains.rag_chain import ask_knowledge_base
@@ -25,4 +26,4 @@ async def query_knowledge_base(request: RAGRequest):
         # 返回友好的错误信息而不是崩溃
         return RAGResponse(answer=f"查询失败: {str(e)}", sources=[])
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise_internal_error(message="查询知识库失败", exc=e)

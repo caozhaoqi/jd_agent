@@ -1,6 +1,7 @@
 import json
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
+from app.core.error_handler import raise_bad_request, raise_internal_error, raise_not_found
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -23,7 +24,7 @@ def get_sessions(user: User = Depends(get_current_user), session: Session = Depe
 def get_messages(session_id: int, user: User = Depends(get_current_user), session: Session = Depends(get_session)):
     chat = session.get(ChatSession, session_id)
     if not chat or chat.user_id != user.id:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise_not_found(message="会话不存在")
     return chat.messages
 
 
@@ -41,7 +42,7 @@ async def stream_chat(
     # 1. 验证会话
     session = db.get(ChatSession, req.session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise_not_found(message="会话不存在")
 
     # 2. 保存用户的新回复到数据库
     user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.content)

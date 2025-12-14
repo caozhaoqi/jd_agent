@@ -1,3 +1,4 @@
+import asyncio
 import platform
 import subprocess
 import tempfile
@@ -6,7 +7,8 @@ import uuid
 import pyttsx3
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, UploadFile, File
+from app.core.error_handler import raise_bad_request, raise_internal_error, raise_not_found
 from fastapi.responses import Response
 from loguru import logger
 from app.core.config import settings
@@ -76,7 +78,7 @@ async def text_to_speech(request: TTSRequest):
     - Windows/Linux: 调用 pyttsx3 -> .wav
     """
     if not text or not text.strip():
-        raise HTTPException(status_code=400, detail="文本为空")
+        raise_bad_request(message="文本为空")
 
     # 获取当前操作系统名称 ('Darwin', 'Windows', 'Linux')
     system_os = platform.system()
@@ -114,9 +116,15 @@ async def text_to_speech(request: TTSRequest):
             mime_type = "audio/wav"
 
             # 使用 pyttsx3 (SAPI5 / eSpeak)
-            # 注意：pyttsx3 是同步阻塞的，高并发建议放入线程池，单人使用无所谓
-            engine.save_to_file(text, output_path)
-            engine.runAndWait()
+            # 注意：pyttsx3 是同步阻塞的，使用 asyncio.to_thread 避免阻塞主线程
+            
+            def generate_audio_sync():
+                # 同步代码块，将在单独的线程中运行
+                engine.save_to_file(text, output_path)
+                engine.runAndWait()
+            
+            # 在单独的线程中运行阻塞的pyttsx3调用
+            await asyncio.to_thread(generate_audio_sync)
 
         # ============================
         # 3. 读取并清理
@@ -165,4 +173,4 @@ async def text_to_speech(request: TTSRequest):
         # 尝试清理残余文件
         if 'output_path' in locals() and os.path.exists(output_path):
             os.remove(output_path)
-        raise HTTPException(status_code=500, detail=f"TTS生成失败: {str(e)}")
+        raise_internal_error(message="TTS生成失败", exc=e)

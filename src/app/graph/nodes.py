@@ -132,7 +132,33 @@ async def reviewer_node(state: AgentState):
 
 # --- Node 6: Human Approval ---
 async def human_approval_node(state: AgentState):
-    # 注意：如果这里用了 async，def 也要改成 async def
     logger.debug("🛑 [System] 任务暂停：等待人工审核...")
     await send_thought("🛑 任务已暂停", "等待人工审核与决策...")
-    pass
+    
+    # 获取当前状态信息用于人工审核
+    current_questions = state.get("tech_questions", [])
+    review_comment = state.get("review_comment", "")
+    quality_score = state.get("quality_score", 0)
+    
+    # 发送详细的审核信息给前端
+    await send_data("human_review_required", {
+        "type": "tech_questions",
+        "questions": current_questions,
+        "quality_score": quality_score,
+        "review_comment": review_comment,
+        "iteration_count": state.get("iteration_count", 0)
+    })
+    
+    # 如果已经有人工反馈，则应用反馈
+    if state.get("human_feedback"):
+        logger.info(f"✅ [Human] 收到人工反馈: {state['human_feedback']}")
+        await send_thought(f"✅ 已应用人工反馈", state['human_feedback'])
+        # 重置质量分数为90分（通过），并更新迭代计数
+        return {
+            "quality_score": 90,
+            "review_comment": f"人工审核通过: {state['human_feedback']}",
+            "human_feedback": None  # 清空反馈，避免重复应用
+        }
+    
+    # 如果没有人工反馈，继续等待（由前端通过API提交反馈）
+    return {}
