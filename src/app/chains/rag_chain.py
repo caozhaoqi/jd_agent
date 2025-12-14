@@ -6,6 +6,8 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 from langchain_core.output_parsers import StrOutputParser
+from loguru import logger
+
 from app.core.config import settings
 
 # 1. 初始化向量数据库连接
@@ -93,16 +95,27 @@ def get_rag_chain():
     return chain
 
 
-# 5. 封装一个简单的调用函数
+# app/chains/rag_chain.py
+
 async def ask_knowledge_base(question: str):
     chain = get_rag_chain()
+
     # 调用链
     result = await chain.ainvoke(question)
 
     answer = result["answer"]
     source_docs = result["docs"]
 
-    # 提取来源列表
+    # --- 🛠️ 调试代码：打印检索到的内容 ---
+    logger.debug(f"\n🔍 [调试] 用户提问: {question}")
+    logger.debug(f"📄 [调试] 检索到 {len(source_docs)} 个片段:")
+    for i, doc in enumerate(source_docs):
+        logger.debug(f"--- 片段 {i + 1} (来源: {doc.metadata.get('source')}) ---")
+        # 只打印前 100 个字，防止刷屏
+        logger.debug(doc.page_content[:100].replace('\n', ' ') + "...")
+    logger.debug("--------------------------------------------------\n")
+    # ------------------------------------
+
     sources = extract_sources(source_docs)
 
     return {
