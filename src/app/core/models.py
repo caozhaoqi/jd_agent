@@ -22,13 +22,15 @@ class UserProfile(SQLModel, table=True):
 
     # 建立与 User 的关联 (需要在 User 类里也加对应的 relationship)
     # user: Optional[User] = Relationship(back_populates="profiles")
-    
+
+
 # --- 数据库模型 ---
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True)
     hashed_password: str
     chats: List["ChatSession"] = Relationship(back_populates="user")
+
 
 class ChatSession(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -38,12 +40,14 @@ class ChatSession(SQLModel, table=True):
     user: Optional[User] = Relationship(back_populates="chats")
     messages: List["ChatMessage"] = Relationship(back_populates="session")
 
+
 class ChatMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     session_id: int = Field(foreign_key="chatsession.id")
-    role: str # "user" or "assistant"
+    role: str  # "user" or "assistant"
     content: str
     session: Optional[ChatSession] = Relationship(back_populates="messages")
+
 
 class InterviewRecord(Base):
     """面试记录表"""
@@ -56,6 +60,7 @@ class InterviewRecord(Base):
 
     def __repr__(self):
         return f"<Record {self.company_name}>"
+
 
 class ChatRequest(BaseModel):
     session_id: int
@@ -85,3 +90,8 @@ class BlogQueryResponse(BaseModel):
 class RAGResponse(BaseModel):
     answer: str
     sources: List[str]
+
+
+# --- 1. 定义请求体模型 (关键修复) ---
+class RAGRequest(BaseModel):
+    question: str

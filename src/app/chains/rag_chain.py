@@ -9,7 +9,7 @@ from langchain_core.output_parsers import StrOutputParser
 from app.core.config import settings
 
 # 1. 初始化向量数据库连接
-DB_DIR = "chroma_db"
+DB_DIR = "/Users/caozhaoqi/PycharmProjects/JD_agent/src/app/blog/chroma_db"
 embedding_model = HuggingFaceEmbeddings(model="shibing624/text2vec-base-chinese")
 
 # 检查数据库是否存在
