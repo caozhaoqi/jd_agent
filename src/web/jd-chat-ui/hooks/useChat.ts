@@ -4,7 +4,7 @@ import { Message, ChatMode } from "@/types/chat";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
 
 // 定义后端 API 基础路径
-const API_BASE = "http://127.0.0.1:8000/api/v1";
+export const API_BASE = "http://127.0.0.1:8000/api/v1";
 
 interface UseChatProps {
   token: string | null;
@@ -167,7 +167,7 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
         // 🟡 场景 C: JD 指南生成
         else if (mode === 'guide') {
             setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-            const res = await fetch(`${API_BASE}/interview/stream/generate-guide`, {
+            const res = await fetch(`${API_BASE}/interview/guide/stream`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });
             await readStream(res);
@@ -175,7 +175,7 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
         // 🟣 场景 D: 模拟面试
         else {
             setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-            const res = await fetch(`${API_BASE}/interview/stream/mock-interview`, {
+            const res = await fetch(`${API_BASE}/interview/mock-interview/stream`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });
             await readStream(res);

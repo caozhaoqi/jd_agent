@@ -11,7 +11,6 @@ from app.core.middleware import LogMiddleware
 from app.utils.logger import logger
 
 # 🔴 导入路由和数据库初始化函数
-from app.api.endpoints import router as api_router
 from app.core.db_auth import create_db_and_tables
 from app.api.api_v1 import api_router
 

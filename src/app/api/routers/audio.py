@@ -4,6 +4,8 @@ import tempfile
 import os
 import uuid
 import pyttsx3
+from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from loguru import logger
@@ -20,7 +22,7 @@ except Exception as e:
     logger.error(f"pyttsx3 init failed: {e}")
 
 
-@router.post("/audio/transcribe")
+@router.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     """
     ASR: 语音转文字 (适配 SiliconFlow SenseVoiceSmall)
@@ -60,7 +62,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
         return {"text": "", "error": str(e)}
 
 
-@router.post("/audio/tts")
+@router.post("/tts")
 async def text_to_speech(request: TTSRequest):
     """
     跨平台 TTS 接口 (完全离线，零延迟)
@@ -122,11 +124,39 @@ async def text_to_speech(request: TTSRequest):
         if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             raise Exception("音频文件生成失败")
 
-        with open(output_path, "rb") as f:
-            audio_data = f.read()
-
-        # 删除临时文件
-        os.remove(output_path)
+        try:
+            # 将生成的音频转换为MP3格式
+            audio_segment = AudioSegment.from_file(output_path)
+            
+            # 创建临时MP3文件
+            mp3_output_path = os.path.join(temp_dir, f"tts_{unique_id}.mp3")
+            
+            # 导出为MP3格式，设置比特率为128k
+            audio_segment.export(mp3_output_path, format="mp3", bitrate="128k")
+            
+            # 读取MP3文件数据
+            with open(mp3_output_path, "rb") as f:
+                audio_data = f.read()
+            
+            # 更新MIME类型为MP3
+            mime_type = "audio/mp3"
+            
+            # 删除临时文件
+            os.remove(output_path)
+            os.remove(mp3_output_path)
+            
+        except CouldntDecodeError:
+            # 如果转码失败，回退到原始格式
+            logger.warning("音频转码失败，回退到原始格式")
+            with open(output_path, "rb") as f:
+                audio_data = f.read()
+            os.remove(output_path)
+        except Exception as e:
+            # 其他转码错误也回退到原始格式
+            logger.warning(f"音频转码出现未知错误 {e}，回退到原始格式")
+            with open(output_path, "rb") as f:
+                audio_data = f.read()
+            os.remove(output_path)
 
         return Response(content=audio_data, media_type=mime_type)
 

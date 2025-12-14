@@ -40,3 +40,7 @@ httpx>=0.26.0
 # --- Logging (日志工具 - 对应 utils/logger.py) ---
 loguru>=0.7.2
 # 推荐使用 loguru 代替 Python 原生 logging，配置更简单，输出更美观
+
+# --- Audio Transcoding (音频转码) ---
+pydub>=0.25.1
+# pydub用于音频格式转换，实现跨平台统一音频格式

@@ -2,6 +2,7 @@ import json
 import asyncio
 from fastapi import APIRouter, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from sqlalchemy.sql.functions import user
 from sqlmodel import Session
 from loguru import logger
 
@@ -68,8 +69,8 @@ async def create_guide(
 @router.post("/guide/stream", summary="流式生成面试指南", description="根据提供的岗位JD流式生成面试指南，实时返回生成过程，支持DeepSeek思考过程展示。")
 async def stream_generate_guide(
         request: JDRequest,
-        # user: User = Depends(get_current_user),
-        # db: Session = Depends(get_session)
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_session)
 ):
     """
     L5 级 Agent 流式生成接口 (支持 DeepSeek 思考过程)
@@ -87,8 +88,9 @@ async def stream_generate_guide(
         # 测试用：模拟用户和数据库
         from app.core.models import User
         from sqlmodel import Session
-        user = User(id=1, username="test_user", email="test@example.com")
-        db = None
+        # 测试账户
+        # user = User(id=1, username="test_user", email="test@example.com")
+        # db = None
 
         # 1. 初始化队列 (ContextVar 会自动绑定到当前 task)
         queue = init_stream_queue()
@@ -265,7 +267,7 @@ async def agent_feedback(
         )
 
 @router.post("/mock-interview/stream", summary="流式模拟面试", description="根据提供的岗位JD启动流式模拟面试，实时返回面试官和候选人的对话过程。")
-async def stream_mock_interview(request: JDRequest):
+async def stream_mock_interview(request: JDRequest, user: User = Depends(get_current_user)):
     """
     流式模拟面试接口
     

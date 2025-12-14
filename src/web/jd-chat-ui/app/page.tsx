@@ -13,6 +13,7 @@ import BrainDashboard, { DashboardState } from "@/components/BrainDashboard";
 
 // Hooks
 import { useChat } from "@/hooks/useChat"; // 引入刚才写的 Hook
+import { API_BASE } from "@/hooks/useChat";
 import { Session, ChatMode } from "@/types/chat";
 
 const ChatInput = dynamic(() => import("@/components/ChatInput"), { ssr: false });
@@ -45,9 +46,11 @@ export default function Home() {
     fetchSessions(t);
   }, []);
 
+
+
   const fetchSessions = async (authToken: string) => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/chat/history/sessions", {
+      const res = await fetch(`${API_BASE}/chat/history/sessions`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       if (res.ok) setSessions(await res.json());

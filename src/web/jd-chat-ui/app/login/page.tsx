@@ -44,7 +44,7 @@ export default function LoginPage() {
         if (res.ok) {
             if (isLogin) {
                 // --- 登录成功 ---
-                localStorage.setItem("token", data.access_token);
+                localStorage.setItem("token", data.data.access_token);
                 localStorage.setItem("username", username);
                 router.push("/"); // 跳转主页
             } else {

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.api.endpoints import get_current_user
+from app.api.deps import get_current_user
 # 导入你需要的 schema 和 service
 from app.schemas.interview import JDRequest, InterviewReport
 from app.services.interview_service import generate_interview_guide
