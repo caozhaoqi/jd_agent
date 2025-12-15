@@ -37,12 +37,16 @@ async def generate_interview_guide(request: JDRequest, db: Session, user_id: int
     tags = [line.strip("- ") for line in ltm_profile.split("\n") if line.strip()]
     await send_data("user_profile", tags, thread_id)
 
-    # 运行到结束（或者暂停点）
-    final_state = await app_graph.ainvoke(initial_state, config=config)
+    # 运行到结束（或者暂停点）- 使用astream实现流式处理
+    final_state = None
+    async for event in app_graph.astream(initial_state, config=config):
+        if event and "values" in event:
+            final_state = event["values"]
     
     # 获取最终状态快照以检查是否需要人工介入
     snapshot = app_graph.get_state(config)
-    final_state = snapshot.values
+    if final_state is None:
+        final_state = snapshot.values
     
     # 发送结束信号到队列 - 延迟一下确保所有节点的思考过程都已发送
     import asyncio

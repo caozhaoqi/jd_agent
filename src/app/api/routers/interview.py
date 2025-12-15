@@ -89,8 +89,9 @@ async def stream_generate_guide(
         
         async def generate_and_stream():
             try:
-                # 获取队列
-                from app.core.stream_manager import get_stream_queue
+                # 初始化 stream_manager 队列
+                from app.core.stream_manager import get_stream_queue, init_stream_queue
+                init_stream_queue(thread_id=thread_id)
                 
                 # 创建一个队列用于收集所有需要发送的消息
                 message_queue = asyncio.Queue()
@@ -130,8 +131,11 @@ async def stream_generate_guide(
                         
                         config = {"configurable": {"thread_id": thread_id}}
                         
-                        # 2. 运行 Graph
-                        final_state = await app_graph.ainvoke(initial_state, config=config)
+                        # 2. 运行 Graph - 使用astream实现流式处理
+                        final_state = None
+                        async for event in app_graph.astream(initial_state, config=config):
+                            if event and "values" in event:
+                                final_state = event["values"]
                         
                         # 3. 处理并发送最终结果
                         # --- 组装 Report 逻辑 ---

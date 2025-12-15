@@ -98,13 +98,17 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
 
                               if (lastMsg.role === "assistant") {
                                   if (payload.type === 'thought') {
-                                      const currentThoughts = lastMsg.thoughts || [];
-                                      if (currentThoughts[currentThoughts.length - 1] !== payload.content) {
-                                          lastMsg.thoughts = [...currentThoughts, payload.content];
-                                      }
-                                      // 收到新的思考步骤，标记思考未完成
-                                      lastMsg.isThinkingFinished = false;
-                                  }
+                                    const currentThoughts = lastMsg.thoughts || [];
+                                    if (currentThoughts[currentThoughts.length - 1] !== payload.content) {
+                                        lastMsg.thoughts = [...currentThoughts, payload.content];
+                                    }
+                                    // 收到新的思考步骤，标记思考未完成
+                                    lastMsg.isThinkingFinished = false;
+                                    // 收到第一个思考过程后，隐藏全局加载指示器
+                                    if (lastMsg.thoughts && lastMsg.thoughts.length === 1) {
+                                        setIsLoading(false);
+                                    }
+                                }
                                   else if (payload.type === 'result') {
                                       const reportData = payload.content;
                                       lastMsg.content = formatReportToMarkdown(reportData);
@@ -160,7 +164,16 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
 
         // 🟢 场景 A: 知识库 RAG
         if (mode === 'rag') {
-            setMessages(prev => [...prev, { role: "assistant", content: "🔍 正在检索知识库..." }]);
+            // 添加带有思考过程的助手消息，与其他模式保持一致
+            setMessages(prev => [...prev, { 
+                role: "assistant", 
+                content: "", 
+                thoughts: ["🔍 正在检索知识库..."],
+                isThinkingFinished: false 
+            }]);
+            
+            // 关闭全局加载状态，显示思考过程
+            setIsLoading(false);
 
             // 注意：这里使用了新的 API 路径结构，请确保后端 api_v1.py 配置正确
             // 如果后端前缀是 /qa，则路径为 /qa/knowledge-base
@@ -176,14 +189,22 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
             const formatted = formatRAGResponse(data);
             setMessages(prev => {
                 const newMsgs = [...prev];
-                newMsgs[newMsgs.length - 1] = { role: "assistant", content: formatted, isJson: true };
+                newMsgs[newMsgs.length - 1] = { 
+                    role: "assistant", 
+                    content: formatted, 
+                    isJson: true,
+                    thoughts: ["🔍 正在检索知识库...", "📝 整理检索结果...", "✅ 完成回答生成"],
+                    isThinkingFinished: true 
+                };
                 return newMsgs;
             });
             if (isTTSEnabled) addToQueue(data.answer);
         }
         // 🔵 场景 B: 连续对话
         else if (currentSessionId) {
-            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: [], isThinkingFinished: false }]);
+            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: ["🤔 正在分析对话上下文..."], isThinkingFinished: false }]);
+            // 关闭全局加载状态，显示思考过程
+            setIsLoading(false);
             const res = await fetch(`${API_BASE}/chat/stream`, {
                 method: "POST", headers, body: JSON.stringify({ session_id: currentSessionId, content: text })
             });
@@ -191,7 +212,9 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
         }
         // 🟡 场景 C: JD 指南生成
         else if (mode === 'guide') {
-            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: [], isThinkingFinished: false }]);
+            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: ["📄 正在解析职位描述..."], isThinkingFinished: false }]);
+            // 关闭全局加载状态，显示思考过程
+            setIsLoading(false);
             const res = await fetch(`${API_BASE}/jd/generate-guide`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });
@@ -199,7 +222,9 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
         }
         // 🟣 场景 D: 模拟面试
         else {
-            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: [], isThinkingFinished: false }]);
+            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: ["🎯 正在准备模拟面试..."], isThinkingFinished: false }]);
+            // 关闭全局加载状态，显示思考过程
+            setIsLoading(false);
             const res = await fetch(`${API_BASE}/interview/mock-interview/stream`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });

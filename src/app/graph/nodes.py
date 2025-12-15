@@ -23,7 +23,7 @@ async def jd_parser_node(state: AgentState, config: Optional[Dict[str, Any]] = N
     # 从state中获取 thread_id
     thread_id = state.get("thread_id")
     logger.debug(f"📌 [Parser Node] thread_id from state: {thread_id}")
-    await send_thought("🔍 [Parser] 正在深度解析 JD...", "提取核心技术栈", thread_id)
+    await send_thought("🔍 [解析器] 正在深度解析职位描述...", "提取核心技术栈", thread_id, delay=2.0)
     # ✅ 触发 Dashboard 更新: 步骤高亮
     await send_data("current_step", "parser", thread_id)
 
@@ -38,7 +38,7 @@ async def jd_parser_node(state: AgentState, config: Optional[Dict[str, Any]] = N
     active_agents = select_agents(complexity_level)
     
     # ✅ 记录复杂度和智能体选择结果
-    await send_thought(f"📊 JD复杂度: {complexity_level}", f"激活智能体: {', '.join(active_agents)}", thread_id)
+    await send_thought(f"📊 职位描述复杂度: {complexity_level}", f"激活智能体: {', '.join(active_agents)}", thread_id, delay=1.5)
 
     return {
         "company_name": meta.company_name,
@@ -62,10 +62,10 @@ async def researcher_node(state: AgentState, config: Optional[Dict[str, Any]] = 
     # 1. 预判：如果是模糊指代，直接跳过搜索
     # 简单判断：是否包含 "某", "知名", "头部" 且不包含 "公司" 或字数太少
     if not company or "某" in company or len(company) < 4:
-        await send_thought("⚠️ 公司名称模糊，跳过精确背调", "将基于行业通用标准分析", thread_id)
-        return {"company_info": "JD 未提供具体公司名称，基于行业通用背景进行分析。"}
+        await send_thought("⚠️ 公司名称模糊，跳过精确背调", "将基于行业通用标准分析", thread_id, delay=1.0)
+        return {"company_info": "职位描述未提供具体公司名称，基于行业通用背景进行分析。"}
 
-    await send_thought(f"🕵️ [Researcher] 正在背调: {state.get('company_name')}", thread_id=thread_id)
+    await send_thought(f"🕵️ [研究员] 正在背调: {state.get('company_name')}", thread_id=thread_id, delay=3.0)
     # ✅ 触发 Dashboard 更新
     await send_data("current_step", "researcher", thread_id)
 
@@ -88,7 +88,7 @@ async def tech_lead_node(state: AgentState, config: Optional[Dict[str, Any]] = N
     # 从state中获取 thread_id
     thread_id = state.get("thread_id")
     logger.debug(f"📌 [TechLead Node] thread_id from state: {thread_id}")
-    await send_thought("💻 [TechLead] 正在构思面试题...", thread_id=thread_id)
+    await send_thought("💻 [技术专家] 正在构思面试题...", thread_id=thread_id, delay=4.0)
     # ✅ 触发 Dashboard 更新
     await send_data("current_step", "tech_lead", thread_id)
 
@@ -106,7 +106,7 @@ async def hr_node(state: AgentState, config: Optional[Dict[str, Any]] = None):
     thread_id = state.get("thread_id")
     logger.debug(f"📌 [HR Node] thread_id from state: {thread_id}")
     logger.debug("👔 [Agent: HR] 正在生成行为面试题...")
-    await send_thought("👔 HR 正在构建行为面试题", "结合 STAR 法则与企业文化", thread_id)
+    await send_thought("👔 HR 正在构建行为面试题", "结合 STAR 法则与企业文化", thread_id, delay=2.5)
     # ✅ 触发 Dashboard 更新
     await send_data("current_step", "hr_agent", thread_id)
 
@@ -130,7 +130,7 @@ async def reviewer_node(state: AgentState, config: Optional[Dict[str, Any]] = No
     logger.info(f"📌 [Reviewer Node] 开始执行, thread_id: {thread_id}, 当前时间: {asyncio.get_event_loop().time()}")
     logger.debug(f"📌 [Reviewer Node] thread_id from state: {thread_id}")
     logger.debug("⚖️ [Agent: QA] 正在审核题目质量...")
-    await send_thought("⚖️ 质检员正在审核题目质量", "评估深度、准确性与匹配度", thread_id)
+    await send_thought("⚖️ 质检员正在审核题目质量", "评估深度、准确性与匹配度", thread_id, delay=2.0)
     # ✅ 触发 Dashboard 更新
     await send_data("current_step", "reviewer", thread_id)
     logger.info(f"📌 [Reviewer Node] send_thought 调用完成, thread_id: {thread_id}, 当前时间: {asyncio.get_event_loop().time()}")
@@ -160,7 +160,7 @@ async def reviewer_node(state: AgentState, config: Optional[Dict[str, Any]] = No
     logger.debug(f"📊 [QA Result] Score: {result['score']}")
 
     # 将评分结果也推给前端
-    await send_thought(f"📊 质检完成，评分: {result['score']}", f"评语: {result.get('comment', '无')}", thread_id)
+    await send_thought(f"📊 质检完成，评分: {result['score']}", f"评语: {result.get('comment', '无')}", thread_id, delay=1.5)
 
     return {"quality_score": result['score'], "review_comment": result['comment'], "thread_id": thread_id}
 
@@ -171,7 +171,7 @@ async def human_approval_node(state: AgentState, config: Optional[Dict[str, Any]
     thread_id = state.get("thread_id")
     logger.debug(f"📌 [Human Approval Node] thread_id from state: {thread_id}")
     logger.debug("🛑 [System] 任务暂停：等待人工审核...")
-    await send_thought("🛑 任务已暂停", "等待人工审核与决策...", thread_id)
+    await send_thought("🛑 任务已暂停", "等待人工审核与决策...", thread_id, delay=1.0)
     
     # 获取当前状态信息用于人工审核
     current_questions = state.get("tech_questions", [])
@@ -190,7 +190,7 @@ async def human_approval_node(state: AgentState, config: Optional[Dict[str, Any]
     # 如果已经有人工反馈，则应用反馈
     if state.get("human_feedback"):
         logger.info(f"✅ [Human] 收到人工反馈: {state['human_feedback']}")
-        await send_thought(f"✅ 已应用人工反馈", state['human_feedback'], thread_id)
+        await send_thought(f"✅ 已应用人工反馈", state['human_feedback'], thread_id, delay=1.0)
         # 重置质量分数为90分（通过），并更新迭代计数
         return {
             "quality_score": 90,

@@ -35,12 +35,15 @@ def get_stream_queue(thread_id: Optional[str] = None) -> Optional[asyncio.Queue]
     logger.info(f"📤 [Stream Manager] 获取队列失败: thread_id=None, queue_accessor={_queue_accessor is not None}")
     return None
 
-async def send_thought(step_title: str, detail: str = "", thread_id: Optional[str] = None):
+async def send_thought(step_title: str, detail: str = "", thread_id: Optional[str] = None, delay: float = 1.0):
     """
     各 Agent 节点调用此函数发送思考过程
+    delay: 发送消息前的延迟时间（秒），用于模拟真实处理时间
     """
     q = get_stream_queue(thread_id)
     if q:
+        # 添加延迟以模拟真实的处理时间
+        await asyncio.sleep(delay)
         logger.info(f"📤 [Stream Manager] 发送思考过程: {step_title}, thread_id: {thread_id}")
         await q.put({
             "type": "thought",
