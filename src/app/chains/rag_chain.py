@@ -85,7 +85,7 @@ def extract_sources(docs):
 
 
 # 4. 构建 RAG 链
-def get_rag_chain():
+def get_rag_chain(streaming: bool = False):
     if not retriever:
         raise ValueError("知识库未构建！请先运行 scripts/build_kb.py")
 
@@ -93,7 +93,8 @@ def get_rag_chain():
         model_name=settings.MODEL_NAME,
         openai_api_key=settings.OPENAI_API_KEY,
         openai_api_base=settings.OPENAI_API_BASE,
-        temperature=0.1  # RAG 任务温度要低，防幻觉
+        temperature=0.1,  # RAG 任务温度要低，防幻觉
+        streaming=streaming
     )
 
     # 使用 RunnableParallel 并行获取检索结果

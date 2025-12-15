@@ -99,7 +99,7 @@ workflow.add_node("human_node", human_approval_node)
 workflow.set_entry_point("parser")
 
 # 2. Parser -> 根据激活的智能体进行条件路由
-# 检查活跃智能体并返回相应的节点名
+# --- 路由逻辑 ---
 def route_agents(state: AgentState) -> Optional[str]:
     active_agents = state.get("active_agents", [])
     if "researcher" in active_agents:
@@ -107,6 +107,7 @@ def route_agents(state: AgentState) -> Optional[str]:
     if "hr_agent" in active_agents:
         return "hr_agent"
     return None
+
 
 # 添加条件边，根据活跃智能体选择路由
 workflow.add_conditional_edges(

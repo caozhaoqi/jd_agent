@@ -1,12 +1,15 @@
 import asyncio
 import httpx
 import os
+import hashlib
+import json
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from loguru import logger
 
 from app.core.llm_factory import get_llm
+from app.core.redis_client import redis_client
 
 
 # ❌ 移除全局初始化，防止启动时因缺少 Key 崩溃
@@ -32,11 +35,31 @@ async def fetch_website_content(url: str) -> str:
             return ""
 
 
+def generate_cache_key(company_name: str) -> str:
+    """
+    生成公司研究结果的缓存键
+    """
+    cache_data = {
+        "company_name": company_name,
+        "version": "1.0"
+    }
+    cache_str = json.dumps(cache_data, sort_keys=True)
+    cache_key = hashlib.md5(cache_str.encode()).hexdigest()
+    return f"company_research:{cache_key}"
+
+
 async def research_company(company_name: str) -> str:
     """
     L5 级背调：搜索 + 筛选 + 深度阅读 + 总结
     """
-    # --- 0. 兜底逻辑 ---
+    # --- 0. 检查缓存 ---
+    cache_key = generate_cache_key(company_name)
+    cached_result = redis_client.get(cache_key)
+    if cached_result:
+        logger.info(f"💾 [Research Cache] 命中缓存: {company_name}")
+        return cached_result
+    
+    # --- 1. 兜底逻辑 ---
     if not company_name or len(company_name) < 2 or "某" in company_name:
         return "⚠️ **提示**：JD 未提供具体公司名称，无法进行精确背调。"
 
@@ -49,7 +72,7 @@ async def research_company(company_name: str) -> str:
 
     try:
         # ✅ 修复核心：在函数内部初始化，避免启动崩溃
-        search_tool = TavilySearchResults(max_results=3)
+        search_tool = TavilySearchResults(max_results=3, timeout=10)
     except Exception as e:
         logger.debug(f"❌ Tavily Init Error: {e}")
         return "搜索工具初始化失败。"
@@ -57,27 +80,24 @@ async def research_company(company_name: str) -> str:
     logger.debug(f"🕵️ [Research] 开始全网搜索: {company_name}")
 
     # --- 2. 关键词扩展 ---
+    # 减少搜索查询数量，提高效率
     queries = [
-        f"{company_name} 官网 核心业务",
-        f"{company_name} 融资情况 发展",
-        f"{company_name} 技术团队 评价"
+        f"{company_name} 官网 核心业务 融资情况"
     ]
 
     # --- 3. 并行搜索 ---
     search_results = []
     try:
-        # Tavily 的异步支持可能不稳定，这里做个简单的循环处理
-        # 如果想要极致并发，可以用 asyncio.to_thread
-        for q in queries:
-            try:
-                # 尝试异步调用
-                res = await search_tool.ainvoke(q)
-            except:
-                # 降级为同步调用
-                res = search_tool.invoke(q)
+        # 使用更高效的搜索策略：只执行一次搜索
+        try:
+            # 尝试异步调用
+            res = await search_tool.ainvoke(queries[0])
+        except:
+            # 降级为同步调用
+            res = search_tool.invoke(queries[0])
 
-            if isinstance(res, list):
-                search_results.extend(res)
+        if isinstance(res, list):
+            search_results.extend(res)
     except Exception as e:
         return f"搜索服务异常: {e}"
 
@@ -101,12 +121,18 @@ async def research_company(company_name: str) -> str:
                 best_url = url
 
     # --- 5. 深度阅读 (钓大鱼) ---
+    # 优化：减少深度阅读频率，只在搜索结果不足时进行
     deep_content = ""
-    if best_url:
+    if best_url and len(unique_results) < 3:
         logger.debug(f"📖 [Research] 正在深度阅读官网: {best_url}")
-        deep_content = await fetch_website_content(best_url)
-        if deep_content:
-            deep_content = f"\n\n=== 官网深度抓取 ({best_url}) ===\n{deep_content}\n"
+        try:
+            # 缩短超时时间，避免等待太久
+            deep_content = await fetch_website_content(best_url)
+            if deep_content:
+                deep_content = f"\n\n=== 官网深度抓取 ({best_url}) ===\n{deep_content[:1500]}\n"  # 进一步限制内容长度
+        except Exception as e:
+            logger.debug(f"⚠️ 深度阅读失败，跳过: {e}")
+            deep_content = ""
 
     # --- 6. LLM 总结 (Prompt 优化版) ---
     llm = get_llm(temperature=0.2)  # 调低温度，让输出更稳定干练
@@ -153,6 +179,11 @@ async def research_company(company_name: str) -> str:
             "company_name": company_name,
             "context": full_context
         })
+        
+        # 缓存结果，有效期7天
+        redis_client.set(generate_cache_key(company_name), summary, expire_seconds=7 * 24 * 3600)
+        logger.info(f"💾 [Research Cache] 缓存结果: {company_name}")
+        
         return summary
     except Exception as e:
         logger.error(f"❌ Summary Gen Error: {e}")

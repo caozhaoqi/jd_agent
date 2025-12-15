@@ -42,21 +42,21 @@ async def generate_tech_async(
     # 动态构建 Prompt
     context_str = ""
     if kb_context:
-        context_str += f"\n[参考知识库]:\n{kb_context}\n"
+        context_str += f"\n[参考知识库]:\n{kb_context[:1500]}\n"  # 限制知识库长度
     if user_profile:
         context_str += f"\n[候选人画像]:\n{user_profile}\n"
 
     prompt = ChatPromptTemplate.from_template(
         """
-        你是一个谷歌级别的技术面试官。
-        请基于以下信息生成 3-5 道硬核技术面试题。
+        你是一个专业技术面试官。
+        请基于以下信息生成 3 道核心技术面试题。
 
         候选人技术栈: {tech_stack}
         目标职级: {level}
         {context_str}
 
         要求：
-        1. 题目要有深度，考察底层原理或实战排错。
+        1. 题目考察核心技术原理或实战能力。
         2. 结合知识库内容（如果有）进行针对性提问。
         3. 严格按照 JSON 格式输出，不要包含 Markdown 代码块标记。
         4. 所有生成内容必须使用中文，包括问题和答案。

@@ -692,7 +692,7 @@ class CachedLLM:
     def __getattr__(self, name: str):
         return getattr(self.llm, name)
 
-def get_llm(temperature=0.7, streaming: bool = False, use_cache: bool = True):
+def get_llm(temperature=0.5, max_tokens=1000, streaming: bool = False, use_cache: bool = True):
     """
     获取 LLM 实例，支持缓存
     """
@@ -701,6 +701,7 @@ def get_llm(temperature=0.7, streaming: bool = False, use_cache: bool = True):
         openai_api_key=settings.OPENAI_API_KEY,
         openai_api_base=settings.OPENAI_API_BASE,
         temperature=temperature,
+        max_tokens=max_tokens,
         streaming=streaming
     )
     

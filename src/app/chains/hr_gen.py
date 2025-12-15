@@ -40,21 +40,21 @@ async def generate_hr_async(soft_skills: List[str], company_info: str = "") -> L
     # 动态构建上下文
     context_str = ""
     if company_info:
-        context_str = f"已知该公司背景如下：{company_info}"
+        context_str = f"已知该公司背景如下：{company_info[:1000]}"  # 限制公司背景长度
 
     prompt = ChatPromptTemplate.from_template(
         """
-        你是一个资深 HR 面试官。
+        你是一个专业 HR 面试官。
         {context_str}
 
         该岗位要求的软技能包括: {soft_skills}
 
-        请设计 2 道行为面试题（Behavioral Questions），要求：
-        1. 基于 STAR 法则（情境、任务、行动、结果）设计。
-        2. 如果提供了公司背景，请尝试结合公司文化提问。
+        请设计 1-2 道行为面试题，要求：
+        1. 基于 STAR 法则设计。
+        2. 如果提供了公司背景，尝试结合公司文化提问。
         3. 类别标记为 'HR/Behavioral'。
         4. 严格按照 JSON 格式输出，不要包含 Markdown 代码块。
-        5. 所有生成内容必须使用中文，包括问题和答案。
+        5. 所有生成内容必须使用中文。
 
         请严格按照 JSON 格式输出:
         {format_instructions}
