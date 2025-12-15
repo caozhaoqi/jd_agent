@@ -1,7 +1,7 @@
 # 确保导入了 JDMetaData
 from sqlmodel import Session
 
-from app.core.stream_manager import send_data
+from app.core.stream_manager import send_data, init_stream_queue, send_done
 from app.graph.workflow import app_graph
 from app.schemas.interview import InterviewReport, JDRequest, JDMetaData
 from loguru import logger
@@ -37,11 +37,7 @@ async def generate_interview_guide(request: JDRequest, db: Session, user_id: int
 
     # 运行到结束（或者暂停点）
     final_state = None
-    async for event in app_graph.astream(initial_state, config=config):
-        # 记录事件日志
-        logger.debug(f"📊 [Graph Event] {event}")
-        # 事件处理逻辑可以在这里添加
-        pass
+    final_state = await app_graph.ainvoke(initial_state, config=config)
 
     # 获取最终状态快照
     snapshot = app_graph.get_state(config)

@@ -4,7 +4,7 @@ from app.core.redis_client import redis_client
 import hashlib
 import json
 from typing import Any, Dict, List, Optional
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, FunctionMessage
 from loguru import logger
 
 class CachedLLM:
@@ -197,7 +197,7 @@ class CachedLLM:
             try:
                 # 将缓存结果转换为 LangChain 预期的格式
                 from langchain_core.outputs import ChatGeneration, ChatResult
-                from langchain_core.messages import BaseMessage
+                from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, FunctionMessage
                 
                 # 处理元组类型的缓存结果
                 if isinstance(cached_result, (tuple, list)):
@@ -219,18 +219,55 @@ class CachedLLM:
                     
                     # 检查 message_dict 是否为有效的 BaseMessage 字典格式
                     if isinstance(message_dict, dict) and "type" in message_dict and "content" in message_dict:
-                        return ChatResult(
-                            generations=[
-                                ChatGeneration(
-                                    message=BaseMessage.from_dict(message_dict),
-                                    generation_info=cached_result.get("generation_info")
-                                )
-                            ],
-                            llm_output=cached_result.get("llm_output")
-                        )
+                        # 根据type字段创建对应的消息实例
+                        msg_type = message_dict.get("type")
+                        content = message_dict.get("content")
+                        additional_kwargs = message_dict.get("additional_kwargs", {})
+                        response_metadata = message_dict.get("response_metadata", {})
+                        
+                        # 确保content是字符串类型
+                        if content is None:
+                            content = ""
+                        elif not isinstance(content, str):
+                            content = str(content)
+                        
+                        # 创建对应的消息实例
+                        if msg_type == "human":
+                            message = HumanMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        elif msg_type == "ai":
+                            message = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        elif msg_type == "system":
+                            message = SystemMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        elif msg_type == "function":
+                            message = FunctionMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        else:
+                            # 默认使用AIMessage
+                            message = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        
+                        # 总是返回字符串内容，与缓存未命中时的行为保持一致
+                        return message.content
             except Exception as e:
                 logger.error(f"❌ [LLM Cache] Failed to process cached result: {e}")
-                # 如果处理缓存结果失败，跳过缓存，直接调用 LLM
+                # 如果处理缓存结果失败，尝试直接提取内容并转换为字符串
+                try:
+                    if isinstance(cached_result, dict):
+                        # 尝试从缓存结果中提取内容
+                        if "message" in cached_result:
+                            message_data = cached_result["message"]
+                            if isinstance(message_data, dict) and "content" in message_data:
+                                content = message_data["content"]
+                                if content is None:
+                                    content = ""
+                                elif not isinstance(content, str):
+                                    content = str(content)
+                                logger.debug(f"📝 [LLM Cache] Directly extracted content from cache: {content[:100]}...")
+                                return content
+                    # 如果无法提取内容，将整个缓存结果转换为字符串
+                    logger.debug(f"📝 [LLM Cache] Converting entire cached result to string")
+                    return str(cached_result)
+                except Exception as inner_e:
+                    logger.error(f"❌ [LLM Cache] Failed to extract or convert cached result: {inner_e}")
+                    # 如果处理失败，跳过缓存，直接调用 LLM
         
         # 缓存未命中或处理失败，调用 LLM
         logger.info(f"🔄 [LLM Cache] Miss cache for key: {cache_key}")
@@ -245,16 +282,32 @@ class CachedLLM:
                 messages = list(messages)
             
             # 处理列表中的元组元素，确保它们是 BaseMessage 类型
-            from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+            from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, FunctionMessage
             processed_messages = []
             for msg in messages:
                 if isinstance(msg, tuple):
                     logger.debug(f"⚠️ [LLM Call] Found tuple element in messages: {msg}")
                     # 如果是元组，尝试将其转换为 BaseMessage
                     if len(msg) > 0 and isinstance(msg[0], dict) and "type" in msg[0]:
-                        # 使用 BaseMessage.from_dict 创建消息对象
+                            # 根据type字段创建对应的消息实例
                         try:
-                            base_msg = BaseMessage.from_dict(msg[0])
+                            msg_dict = msg[0]
+                            msg_type = msg_dict.get("type")
+                            content = msg_dict.get("content")
+                            additional_kwargs = msg_dict.get("additional_kwargs", {})
+                            response_metadata = msg_dict.get("response_metadata", {})
+                            
+                            if msg_type == "human":
+                                base_msg = HumanMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "ai":
+                                base_msg = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "system":
+                                base_msg = SystemMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "function":
+                                base_msg = FunctionMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            else:
+                                base_msg = HumanMessage(content=str(msg_dict))
+                            
                             processed_messages.append(base_msg)
                             continue
                         except Exception as e:
@@ -266,8 +319,23 @@ class CachedLLM:
                     logger.debug(f"⚠️ [LLM Call] Found non-BaseMessage element: {msg}, type: {type(msg).__name__}")
                     try:
                         if isinstance(msg, dict) and "type" in msg:
-                            # 使用 BaseMessage.from_dict 创建消息对象
-                            base_msg = BaseMessage.from_dict(msg)
+                            # 根据type字段创建对应的消息实例
+                            msg_type = msg.get("type")
+                            content = msg.get("content")
+                            additional_kwargs = msg.get("additional_kwargs", {})
+                            response_metadata = msg.get("response_metadata", {})
+                            
+                            if msg_type == "human":
+                                base_msg = HumanMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "ai":
+                                base_msg = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "system":
+                                base_msg = SystemMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "function":
+                                base_msg = FunctionMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            else:
+                                base_msg = HumanMessage(content=str(msg))
+                            
                             processed_messages.append(base_msg)
                         else:
                             # 否则，将其转换为 HumanMessage
@@ -287,53 +355,85 @@ class CachedLLM:
             logger.error(f"❌ [LLM Call] messages type: {type(messages).__name__}, messages: {messages}")
             raise
         
-        # 将结果缓存
-        if result:
-            # 将结果转换为可序列化的格式
-            try:
-                from langchain_core.messages import BaseMessage
-                from langchain_core.outputs import ChatResult, ChatGeneration
+        # 处理结果类型，确保返回正确的格式
+        try:
+            from langchain_core.outputs import ChatResult, ChatGeneration
+            from langchain_core.messages import BaseMessage
+            
+            # 检查结果类型
+            if isinstance(result, ChatResult):
+                # 如果是 ChatResult 类型，提取文本内容
+                llm_text = result.generations[0].message.content
                 
-                # 检查结果类型
-                if isinstance(result, ChatResult):
-                    # 如果是 ChatResult 类型（包含 generations）
-                    cache_data = {
-                        "message": result.generations[0].message.dict(),
-                        "generation_info": result.generations[0].generation_info if isinstance(result.generations[0].generation_info, (dict, list, str, int, float, bool, type(None))) else str(result.generations[0].generation_info),
-                        "llm_output": result.llm_output if isinstance(result.llm_output, (dict, list, str, int, float, bool, type(None))) else str(result.llm_output)
-                    }
-                elif isinstance(result, BaseMessage):
-                    # 如果直接返回 BaseMessage 类型
-                    cache_data = {
-                        "message": result.dict(),
-                        "generation_info": None,
-                        "llm_output": None
-                    }
-                elif isinstance(result, dict):
-                    # 如果是字典类型
-                    cache_data = {
-                        "message": result.get("message", {}),
-                        "generation_info": result.get("generation_info"),
-                        "llm_output": result.get("llm_output")
-                    }
-                else:
-                    # 其他类型，尝试将其转换为字符串
-                    cache_data = {
-                        "message": {"type": "ai", "content": str(result)},
-                        "generation_info": None,
-                        "llm_output": None
-                    }
-                
+                # 将结果缓存
+                cache_data = {
+                    "message": result.generations[0].message.dict(),
+                    "generation_info": result.generations[0].generation_info if isinstance(result.generations[0].generation_info, (dict, list, str, int, float, bool, type(None))) else str(result.generations[0].generation_info),
+                    "llm_output": result.llm_output if isinstance(result.llm_output, (dict, list, str, int, float, bool, type(None))) else str(result.llm_output)
+                }
                 redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
                 logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
-            except Exception as e:
-                logger.error(f"❌ [LLM Cache] Failed to serialize result for caching: {e}")
-                # 如果序列化失败，跳过缓存
-                pass
-        
-        return result
+                
+                return llm_text
+            elif isinstance(result, BaseMessage):
+                # 如果直接返回 BaseMessage 类型，提取文本内容
+                llm_text = result.content
+                
+                # 将结果缓存
+                cache_data = {
+                    "message": result.dict(),
+                    "generation_info": None,
+                    "llm_output": None
+                }
+                redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
+                logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
+                
+                return llm_text
+            elif isinstance(result, str):
+                # 如果已经是字符串类型，直接返回
+                # 将结果缓存
+                cache_data = {
+                    "message": {"type": "ai", "content": result},
+                    "generation_info": None,
+                    "llm_output": None
+                }
+                redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
+                logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
+                
+                return result
+            else:
+                # 其他类型，尝试转换为字符串
+                llm_text = str(result)
+                
+                # 将结果缓存
+                cache_data = {
+                    "message": {"type": "ai", "content": llm_text},
+                    "generation_info": None,
+                    "llm_output": None
+                }
+                redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
+                logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
+                
+                return llm_text
+        except Exception as e:
+            logger.error(f"❌ [LLM Cache] Failed to process LLM result: {e}")
+            # 如果处理失败，将结果转换为字符串返回
+            try:
+                from langchain_core.outputs import ChatResult
+                from langchain_core.messages import BaseMessage
+                
+                if isinstance(result, ChatResult):
+                    return result.generations[0].message.content
+                elif isinstance(result, BaseMessage):
+                    return result.content
+                else:
+                    return str(result)
+            except Exception as inner_e:
+                logger.error(f"❌ [LLM Cache] Failed to convert error result to string: {inner_e}")
+                # 最后尝试直接转换为字符串
+                return str(result)
     
-    async def __acall__(self, messages: List[BaseMessage], **kwargs) -> Any:
+    async def ainvoke(self, messages: List[BaseMessage], **kwargs) -> Any:
         """
         异步调用 LLM，先检查缓存
         """
@@ -352,7 +452,7 @@ class CachedLLM:
             try:
                 # 将缓存结果转换为 LangChain 预期的格式
                 from langchain_core.outputs import ChatGeneration, ChatResult
-                from langchain_core.messages import BaseMessage
+                from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, FunctionMessage, HumanMessage
                 
                 # 处理元组类型的缓存结果
                 if isinstance(cached_result, (tuple, list)):
@@ -374,18 +474,55 @@ class CachedLLM:
                     
                     # 检查 message_dict 是否为有效的 BaseMessage 字典格式
                     if isinstance(message_dict, dict) and "type" in message_dict and "content" in message_dict:
-                        return ChatResult(
-                            generations=[
-                                ChatGeneration(
-                                    message=BaseMessage.from_dict(message_dict),
-                                    generation_info=cached_result.get("generation_info")
-                                )
-                            ],
-                            llm_output=cached_result.get("llm_output")
-                        )
+                        # 根据type字段创建对应的消息实例
+                        msg_type = message_dict.get("type")
+                        content = message_dict.get("content")
+                        additional_kwargs = message_dict.get("additional_kwargs", {})
+                        response_metadata = message_dict.get("response_metadata", {})
+                        
+                        # 确保content是字符串类型
+                        if content is None:
+                            content = ""
+                        elif not isinstance(content, str):
+                            content = str(content)
+                        
+                        # 创建对应的消息实例
+                        if msg_type == "human":
+                            message = HumanMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        elif msg_type == "ai":
+                            message = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        elif msg_type == "system":
+                            message = SystemMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        elif msg_type == "function":
+                            message = FunctionMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        else:
+                            # 默认使用AIMessage
+                            message = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                        
+                        # 总是返回字符串内容，与缓存未命中时的行为保持一致
+                        return message.content
             except Exception as e:
                 logger.error(f"❌ [LLM Cache] Failed to process cached result: {e}")
-                # 如果处理缓存结果失败，跳过缓存，直接调用 LLM
+                # 如果处理缓存结果失败，尝试直接提取内容并转换为字符串
+                try:
+                    if isinstance(cached_result, dict):
+                        # 尝试从缓存结果中提取内容
+                        if "message" in cached_result:
+                            message_data = cached_result["message"]
+                            if isinstance(message_data, dict) and "content" in message_data:
+                                content = message_data["content"]
+                                if content is None:
+                                    content = ""
+                                elif not isinstance(content, str):
+                                    content = str(content)
+                                logger.debug(f"📝 [LLM Cache] Directly extracted content from cache: {content[:100]}...")
+                                return content
+                    # 如果无法提取内容，将整个缓存结果转换为字符串
+                    logger.debug(f"📝 [LLM Cache] Converting entire cached result to string")
+                    return str(cached_result)
+                except Exception as inner_e:
+                    logger.error(f"❌ [LLM Cache] Failed to extract or convert cached result: {inner_e}")
+                    # 如果处理失败，跳过缓存，直接调用 LLM
         
         # 缓存未命中或处理失败，调用 LLM
         logger.info(f"🔄 [LLM Cache] Miss cache for key: {cache_key}")
@@ -400,16 +537,32 @@ class CachedLLM:
                 messages = list(messages)
             
             # 处理列表中的元组元素，确保它们是 BaseMessage 类型
-            from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+            from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, FunctionMessage
             processed_messages = []
             for msg in messages:
                 if isinstance(msg, tuple):
                     logger.debug(f"⚠️ [LLM Call] Found tuple element in messages: {msg}")
                     # 如果是元组，尝试将其转换为 BaseMessage
                     if len(msg) > 0 and isinstance(msg[0], dict) and "type" in msg[0]:
-                        # 使用 BaseMessage.from_dict 创建消息对象
+                            # 根据type字段创建对应的消息实例
                         try:
-                            base_msg = BaseMessage.from_dict(msg[0])
+                            msg_dict = msg[0]
+                            msg_type = msg_dict.get("type")
+                            content = msg_dict.get("content")
+                            additional_kwargs = msg_dict.get("additional_kwargs", {})
+                            response_metadata = msg_dict.get("response_metadata", {})
+                            
+                            if msg_type == "human":
+                                base_msg = HumanMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "ai":
+                                base_msg = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "system":
+                                base_msg = SystemMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "function":
+                                base_msg = FunctionMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            else:
+                                base_msg = HumanMessage(content=str(msg_dict))
+                            
                             processed_messages.append(base_msg)
                             continue
                         except Exception as e:
@@ -421,8 +574,23 @@ class CachedLLM:
                     logger.debug(f"⚠️ [LLM Call] Found non-BaseMessage element: {msg}, type: {type(msg).__name__}")
                     try:
                         if isinstance(msg, dict) and "type" in msg:
-                            # 使用 BaseMessage.from_dict 创建消息对象
-                            base_msg = BaseMessage.from_dict(msg)
+                            # 根据type字段创建对应的消息实例
+                            msg_type = msg.get("type")
+                            content = msg.get("content")
+                            additional_kwargs = msg.get("additional_kwargs", {})
+                            response_metadata = msg.get("response_metadata", {})
+                            
+                            if msg_type == "human":
+                                base_msg = HumanMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "ai":
+                                base_msg = AIMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "system":
+                                base_msg = SystemMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            elif msg_type == "function":
+                                base_msg = FunctionMessage(content=content, additional_kwargs=additional_kwargs, response_metadata=response_metadata)
+                            else:
+                                base_msg = HumanMessage(content=str(msg))
+                            
                             processed_messages.append(base_msg)
                         else:
                             # 否则，将其转换为 HumanMessage
@@ -442,51 +610,83 @@ class CachedLLM:
             logger.error(f"❌ [LLM Call] messages type: {type(messages).__name__}, messages: {messages}")
             raise
         
-        # 将结果缓存
-        if result:
-            # 将结果转换为可序列化的格式
-            try:
-                from langchain_core.messages import BaseMessage
-                from langchain_core.outputs import ChatResult, ChatGeneration
+        # 处理结果类型，确保返回正确的格式
+        try:
+            from langchain_core.outputs import ChatResult, ChatGeneration
+            from langchain_core.messages import BaseMessage
+            
+            # 检查结果类型
+            if isinstance(result, ChatResult):
+                # 如果是 ChatResult 类型，提取文本内容
+                llm_text = result.generations[0].message.content
                 
-                # 检查结果类型
-                if isinstance(result, ChatResult):
-                    # 如果是 ChatResult 类型（包含 generations）
-                    cache_data = {
-                        "message": result.generations[0].message.dict(),
-                        "generation_info": result.generations[0].generation_info if isinstance(result.generations[0].generation_info, (dict, list, str, int, float, bool, type(None))) else str(result.generations[0].generation_info),
-                        "llm_output": result.llm_output if isinstance(result.llm_output, (dict, list, str, int, float, bool, type(None))) else str(result.llm_output)
-                    }
-                elif isinstance(result, BaseMessage):
-                    # 如果直接返回 BaseMessage 类型
-                    cache_data = {
-                        "message": result.dict(),
-                        "generation_info": None,
-                        "llm_output": None
-                    }
-                elif isinstance(result, dict):
-                    # 如果是字典类型
-                    cache_data = {
-                        "message": result.get("message", {}),
-                        "generation_info": result.get("generation_info"),
-                        "llm_output": result.get("llm_output")
-                    }
-                else:
-                    # 其他类型，尝试将其转换为字符串
-                    cache_data = {
-                        "message": {"type": "ai", "content": str(result)},
-                        "generation_info": None,
-                        "llm_output": None
-                    }
-                
+                # 将结果缓存
+                cache_data = {
+                    "message": result.generations[0].message.dict(),
+                    "generation_info": result.generations[0].generation_info if isinstance(result.generations[0].generation_info, (dict, list, str, int, float, bool, type(None))) else str(result.generations[0].generation_info),
+                    "llm_output": result.llm_output if isinstance(result.llm_output, (dict, list, str, int, float, bool, type(None))) else str(result.llm_output)
+                }
                 redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
                 logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
-            except Exception as e:
-                logger.error(f"❌ [LLM Cache] Failed to serialize result for caching: {e}")
-                # 如果序列化失败，跳过缓存
-                pass
-        
-        return result
+                
+                return llm_text
+            elif isinstance(result, BaseMessage):
+                # 如果直接返回 BaseMessage 类型，提取文本内容
+                llm_text = result.content
+                
+                # 将结果缓存
+                cache_data = {
+                    "message": result.dict(),
+                    "generation_info": None,
+                    "llm_output": None
+                }
+                redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
+                logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
+                
+                return llm_text
+            elif isinstance(result, str):
+                # 如果已经是字符串类型，直接返回
+                # 将结果缓存
+                cache_data = {
+                    "message": {"type": "ai", "content": result},
+                    "generation_info": None,
+                    "llm_output": None
+                }
+                redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
+                logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
+                
+                return result
+            else:
+                # 其他类型，尝试转换为字符串
+                llm_text = str(result)
+                
+                # 将结果缓存
+                cache_data = {
+                    "message": {"type": "ai", "content": llm_text},
+                    "generation_info": None,
+                    "llm_output": None
+                }
+                redis_client.set(cache_key, cache_data, self.cache_expire_seconds)
+                logger.info(f"💾 [LLM Cache] Saved result to cache for key: {cache_key}")
+                
+                return llm_text
+        except Exception as e:
+            logger.error(f"❌ [LLM Cache] Failed to process LLM result: {e}")
+            # 如果处理失败，将结果转换为字符串返回
+            try:
+                from langchain_core.outputs import ChatResult
+                from langchain_core.messages import BaseMessage
+                
+                if isinstance(result, ChatResult):
+                    return result.generations[0].message.content
+                elif isinstance(result, BaseMessage):
+                    return result.content
+                else:
+                    return str(result)
+            except Exception as inner_e:
+                logger.error(f"❌ [LLM Cache] Failed to convert error result to string: {inner_e}")
+                # 最后尝试直接转换为字符串
+                return str(result)
     
     # 代理其他方法调用
     def __getattr__(self, name: str):
