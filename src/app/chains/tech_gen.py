@@ -59,6 +59,7 @@ async def generate_tech_async(
         1. 题目要有深度，考察底层原理或实战排错。
         2. 结合知识库内容（如果有）进行针对性提问。
         3. 严格按照 JSON 格式输出，不要包含 Markdown 代码块标记。
+        4. 所有生成内容必须使用中文，包括问题和答案。
 
         输出格式要求:
         {format_instructions}

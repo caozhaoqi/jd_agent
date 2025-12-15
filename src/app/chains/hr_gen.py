@@ -54,6 +54,7 @@ async def generate_hr_async(soft_skills: List[str], company_info: str = "") -> L
         2. 如果提供了公司背景，请尝试结合公司文化提问。
         3. 类别标记为 'HR/Behavioral'。
         4. 严格按照 JSON 格式输出，不要包含 Markdown 代码块。
+        5. 所有生成内容必须使用中文，包括问题和答案。
 
         请严格按照 JSON 格式输出:
         {format_instructions}
