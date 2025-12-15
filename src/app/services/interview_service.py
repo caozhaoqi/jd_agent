@@ -1,7 +1,8 @@
 # 确保导入了 JDMetaData
+import asyncio
 from sqlmodel import Session
 
-from app.core.stream_manager import send_data, init_stream_queue, send_done
+from app.core.stream_manager import send_data, init_stream_queue, send_done, send_token
 from app.graph.workflow import app_graph
 from app.schemas.interview import InterviewReport, JDRequest, JDMetaData
 from loguru import logger
@@ -15,17 +16,18 @@ async def generate_interview_guide(request: JDRequest, db: Session, user_id: int
     ltm_profile = get_user_profile_str(db, user_id)
 
     # 1. 准备初始状态
+    thread_id = f"user_{user_id}_job_{hash(request.jd_text)}"
     initial_state = {
         "jd_text": request.jd_text,
         "user_id": user_id,
         "iteration_count": 0,
         "tech_stack": [],  # 初始化空列表防止 KeyErr
         "years_required": "",  # 初始化
-        "company_name": ""  # 初始化
+        "company_name": "",  # 初始化
+        "thread_id": thread_id  # ✅ 直接添加到state中
     }
 
     # 2. 运行 Graph
-    thread_id = f"user_{user_id}_job_{hash(request.jd_text)}"
     config = {"configurable": {"thread_id": thread_id}}
     
     # ✅ 初始化队列
@@ -36,14 +38,15 @@ async def generate_interview_guide(request: JDRequest, db: Session, user_id: int
     await send_data("user_profile", tags, thread_id)
 
     # 运行到结束（或者暂停点）
-    final_state = None
     final_state = await app_graph.ainvoke(initial_state, config=config)
-
-    # 获取最终状态快照
+    
+    # 获取最终状态快照以检查是否需要人工介入
     snapshot = app_graph.get_state(config)
     final_state = snapshot.values
     
-    # 发送结束信号到队列
+    # 发送结束信号到队列 - 延迟一下确保所有节点的思考过程都已发送
+    import asyncio
+    await asyncio.sleep(0.5)
     await send_done(thread_id)
 
     # 3. 检查是否需要人工介入

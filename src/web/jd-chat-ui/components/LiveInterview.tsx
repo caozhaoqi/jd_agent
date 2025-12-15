@@ -34,7 +34,7 @@ export default function LiveInterview() {
     >
       {/* 音频可视化条 */}
       <div className="h-32 flex items-center">
-          <BarVisualizer state="expanded" barCount={7} trackRef={...} />
+          <BarVisualizer barCount={7} />
       </div>
 
       {/* 状态显示 */}

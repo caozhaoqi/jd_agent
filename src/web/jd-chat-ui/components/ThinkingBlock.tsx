@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, BrainCircuit, Loader2, CheckCircle2 } from "lucide-react";
+import { BrainCircuit, Loader2, CheckCircle2 } from "lucide-react";
 import clsx from "clsx";
 
 interface ThinkingBlockProps {
@@ -8,75 +8,72 @@ interface ThinkingBlockProps {
 }
 
 export default function ThinkingBlock({ thoughts, isFinished }: ThinkingBlockProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [elapsed, setElapsed] = useState(0);
-
-  // 计时器
-  useEffect(() => {
-    if (isFinished) return;
-    const timer = setInterval(() => setElapsed(s => s + 0.1), 100);
-    return () => clearInterval(timer);
-  }, [isFinished]);
-
-  // 思考完成后自动折叠 (可选)
-  useEffect(() => {
-    if (isFinished) {
-      // 等待 1 秒后自动折叠，给用户一种“完成感”
-      const timer = setTimeout(() => setIsExpanded(false), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isFinished]);
-
+  // 如果没有思考步骤，返回null
   if (!thoughts || thoughts.length === 0) return null;
 
-  const statusText = isFinished
-    ? `深度思考已完成 (耗时 ${elapsed.toFixed(1)}s)`
-    : "JD agent 正在思考...";
-
   return (
-    <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden transition-all duration-300">
-      {/* 标题栏 */}
-      <div
-        className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-gray-100/80 transition-colors select-none"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className={clsx("p-1 rounded", isFinished ? "text-green-600" : "text-blue-600 animate-pulse")}>
-            {isFinished ? <BrainCircuit size={18} /> : <Loader2 size={18} className="animate-spin" />}
-        </div>
+    <div className="space-y-2 mb-3">
+      {/* 思考过程标题 */}
+      <div className="text-xs font-semibold text-gray-500 mb-1">思考过程</div>
+      
+      {/* 所有思考步骤列表 */}
+      <div className="space-y-1.5">
+        {thoughts.map((thought, index) => {
+          const isCurrent = index === thoughts.length - 1;
+          const isCompleted = index < thoughts.length - 1;
+          
+          return (
+            <div 
+              key={index} 
+              className="flex items-center gap-2 text-sm transition-all duration-300 animate-fadeIn"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              {/* 步骤指示器 */}
+              <div className={clsx(
+                "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300",
+                isCompleted ? "bg-green-100 text-green-600 scale-100" : 
+                isCurrent && !isFinished ? "bg-blue-100 text-blue-600 scale-100 animate-pulse" : 
+                "bg-gray-100 text-gray-400 scale-90"
+              )}>
+                {isCompleted ? (
+                  <CheckCircle2 size={12} className="transition-all duration-300" />
+                ) : isCurrent && !isFinished ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <BrainCircuit size={12} className="transition-all duration-300" />
+                )}
+              </div>
 
-        <span className="text-sm font-medium text-gray-600">{statusText}</span>
-
-        <div className="ml-auto text-gray-400 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-          <ChevronDown size={16} />
-        </div>
+              {/* 思考步骤文本 */}
+              <span className={clsx(
+                "leading-relaxed transition-all duration-300",
+                isCompleted ? "text-gray-600 opacity-100" : 
+                isCurrent ? "text-blue-700 font-medium opacity-100" : 
+                "text-gray-400 opacity-70"
+              )}>
+                {thought}
+              </span>
+            </div>
+          );
+        })}
       </div>
-
-      {/* 思考内容区 (手风琴动画) */}
-      <div className={clsx(
-          "transition-[max-height,opacity] duration-500 ease-in-out overflow-hidden",
-          isExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
-      )}>
-        <div className="px-4 pb-4 pt-0 border-t border-gray-100 bg-white/50">
-          <ul className="space-y-3 mt-3 relative">
-            {/* 连线效果 */}
-            <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-gray-200" />
-
-            {thoughts.map((step, idx) => (
-              <li key={idx} className="flex gap-3 text-sm text-gray-600 items-start animate-in fade-in slide-in-from-left-2 duration-300 relative z-10">
-                <div className={clsx(
-                    "w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 bg-white",
-                    idx === thoughts.length - 1 && !isFinished
-                        ? "border-blue-500 animate-ping"
-                        : "border-gray-300"
-                )} />
-                <span className={clsx(idx === thoughts.length - 1 && !isFinished && "text-blue-600 font-medium")}>
-                    {step}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      
+      {/* 添加全局动画样式 */}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 }

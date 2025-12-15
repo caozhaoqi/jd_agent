@@ -11,6 +11,7 @@ class AgentState(TypedDict):
     # --- 基础输入 ---
     jd_text: str
     user_id: int
+    thread_id: str
 
     # --- 中间态 ---
     company_name: Optional[str]

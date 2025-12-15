@@ -59,9 +59,25 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
 
               for (const line of lines) {
                   if (line.startsWith("data: ")) {
-                      const dataStr = line.replace("data: ", "").trim();
-                      if (dataStr === "[DONE]") break;
-                      if (!dataStr) continue;
+                          const dataStr = line.replace("data: ", "").trim();
+                          if (dataStr === "[DONE]") {
+                              // 收到结束信号，标记思考过程为完成
+                              setMessages(prev => {
+                                  if (prev.length === 0) return prev;
+                                  const newMsgs = [...prev];
+                                  const lastIndex = newMsgs.length - 1;
+                                  const lastMsg = { ...newMsgs[lastIndex] };
+                                  
+                                  if (lastMsg.role === "assistant") {
+                                      lastMsg.isThinkingFinished = true;
+                                      newMsgs[lastIndex] = lastMsg;
+                                  }
+                                  
+                                  return newMsgs;
+                              });
+                              break;
+                          }
+                          if (!dataStr) continue;
 
                       try {
                           const payload = JSON.parse(dataStr);
@@ -86,15 +102,24 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
                                       if (currentThoughts[currentThoughts.length - 1] !== payload.content) {
                                           lastMsg.thoughts = [...currentThoughts, payload.content];
                                       }
+                                      // 收到新的思考步骤，标记思考未完成
+                                      lastMsg.isThinkingFinished = false;
                                   }
                                   else if (payload.type === 'result') {
-                                      const reportData = JSON.parse(payload.content);
+                                      const reportData = payload.content;
                                       lastMsg.content = formatReportToMarkdown(reportData);
                                       lastMsg.isJson = true;
                                       if (reportData.session_id) onSessionCreated(reportData.session_id);
+                                      // 收到最终结果，标记思考完成
+                                      lastMsg.isThinkingFinished = true;
                                   }
                                   else if (payload.type === 'token') {
                                       lastMsg.content += (payload.content || "");
+                                      // 只有在明确知道思考过程已完成时才标记为true
+                                      // 避免在开始生成内容时过早标记思考完成
+                                      if (lastMsg.isThinkingFinished === undefined) {
+                                          lastMsg.isThinkingFinished = false;
+                                      }
                                   }
                                   newMsgs[lastIndex] = lastMsg;
                               }
@@ -158,7 +183,7 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
         }
         // 🔵 场景 B: 连续对话
         else if (currentSessionId) {
-            setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: [], isThinkingFinished: false }]);
             const res = await fetch(`${API_BASE}/chat/stream`, {
                 method: "POST", headers, body: JSON.stringify({ session_id: currentSessionId, content: text })
             });
@@ -166,15 +191,15 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
         }
         // 🟡 场景 C: JD 指南生成
         else if (mode === 'guide') {
-            setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-            const res = await fetch(`${API_BASE}/interview/guide/stream`, {
+            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: [], isThinkingFinished: false }]);
+            const res = await fetch(`${API_BASE}/jd/generate-guide`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });
             await readStream(res);
         }
         // 🟣 场景 D: 模拟面试
         else {
-            setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+            setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: [], isThinkingFinished: false }]);
             const res = await fetch(`${API_BASE}/interview/mock-interview/stream`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });

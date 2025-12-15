@@ -150,21 +150,25 @@ async def text_to_speech(request: TTSRequest):
             mime_type = "audio/mp3"
             
             # 删除临时文件
-            os.remove(output_path)
-            os.remove(mp3_output_path)
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            if os.path.exists(mp3_output_path):
+                os.remove(mp3_output_path)
             
         except CouldntDecodeError:
             # 如果转码失败，回退到原始格式
             logger.warning("音频转码失败，回退到原始格式")
-            with open(output_path, "rb") as f:
-                audio_data = f.read()
-            os.remove(output_path)
+            if os.path.exists(output_path):
+                with open(output_path, "rb") as f:
+                    audio_data = f.read()
+                os.remove(output_path)
         except Exception as e:
             # 其他转码错误也回退到原始格式
             logger.warning(f"音频转码出现未知错误 {e}，回退到原始格式")
-            with open(output_path, "rb") as f:
-                audio_data = f.read()
-            os.remove(output_path)
+            if os.path.exists(output_path):
+                with open(output_path, "rb") as f:
+                    audio_data = f.read()
+                os.remove(output_path)
 
         return Response(content=audio_data, media_type=mime_type)
 

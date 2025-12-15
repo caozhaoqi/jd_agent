@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { API_BASE } from '../hooks/useChat';
+// import { API_BASE } from '../hooks/useChat';
 import { useRouter } from 'next/navigation';
+import { API_BASE } from '@/hooks/useChat';
 
 export default function MockInterviewPage() {
   const [jdText, setJdText] = useState('');

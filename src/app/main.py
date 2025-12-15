@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AI Interview Agent API",
     description="基于 LangChain 的智能面试准备助手",
-    version="1.0.0",
+    version="3.1.0",
     docs_url="/docs",
     lifespan=lifespan  # 挂载 lifespan
 )
@@ -45,7 +45,7 @@ app = FastAPI(
 origins = [
     "http://localhost",
     "http://localhost:3000",
-    "http://localhost:3001"
+    # "http://localhost:3001"
 ]
 
 app.add_middleware(

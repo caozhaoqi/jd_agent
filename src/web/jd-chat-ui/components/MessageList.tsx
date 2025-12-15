@@ -41,26 +41,48 @@ export default function MessageList({
                 {msg.role === "assistant" ? (
                   <div className="prose prose-sm max-w-none ...">
 
-                    {/* ✅ 渲染思考过程 */}
-                    {/* 只要有思考步骤，或者内容还没生成完，就显示 */}
+                    {/* 思考过程显示在文本内容上方 */}
                     {(msg.thoughts?.length || 0) > 0 && (
-                        <ThinkingBlock
-                            thoughts={msg.thoughts || []}
-                            isFinished={msg.content.length > 5} // 简单判断：如果正文开始输出了，就认为思考结束
-                        />
+                        <div className="mb-3 p-3 rounded-lg bg-gray-50 border border-gray-100 shadow-sm">
+                            <ThinkingBlock
+                                thoughts={msg.thoughts || []}
+                                isFinished={msg.isThinkingFinished || false}
+                            />
+                        </div>
                     )}
 
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <div className="prose prose-sm max-w-none">
+                        <div className="animate-typewriter">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                    </div>
+                    
+                    {/* 添加打字机动画样式 */}
+                    <style jsx>{`
+                        .animate-typewriter {
+                            animation: typewriter 0.1s steps(1, end) forwards;
+                        }
+                        
+                        @keyframes typewriter {
+                            from {
+                                opacity: 0.95;
+                            }
+                            to {
+                                opacity: 1;
+                            }
+                        }
+                    `}</style>
                   </div>
                 ) : msg.content}
             </div>
           </div>
         ))}
 
-        {/* Loading 状态 */}
+        {/* Loading 状态 - 发送消息后立即显示 */}
         {isLoading && (
-          <div className="flex justify-center py-4">
-            <Loader2 className="animate-spin text-blue-500" />
+          <div className="flex items-center justify-center gap-2 py-6 text-blue-600">
+            <Loader2 className="animate-spin" />
+            <span className="text-sm font-medium">系统正在处理您的请求...</span>
           </div>
         )}
 

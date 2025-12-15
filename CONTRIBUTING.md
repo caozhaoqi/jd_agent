@@ -13,7 +13,7 @@ https://gitee.com/
 - 2.注册完成后，找到项目 git 路径使用以下命令拉取代码
 
 ```sh
-git clone https://gitee.com/caozhaoqi/audio_record_server
+git clone https://gihub.com/caozhaoqi
 ```
 
 - 3.下载代码后，使用对应(`README.md`文档)版本工具打开并修改。

@@ -14,18 +14,22 @@ async def upload_resume(
         user: User = Depends(get_current_user),
         db: Session = Depends(get_session)
 ):
-    resume_text = await parse_resume_file(file)
-    facts = await extract_resume_features(resume_text)
+    try:
+        resume_text = await parse_resume_file(file)
+        facts = await extract_resume_features(resume_text)
 
-    if not facts:
-        return {"msg": "简历解析完成，但未提取到有效信息", "count": 0}
+        if not facts:
+            return {"msg": "简历解析完成，但未提取到有效信息", "new_entries": 0}
 
-    count = 0
-    for fact in facts:
-        exists = db.exec(
-            select(UserProfile).where(UserProfile.user_id == user.id, UserProfile.content == fact.content)).first()
-        if not exists:
-            db.add(UserProfile(user_id=user.id, category=f"resume_{fact.category}", content=fact.content))
-            count += 1
-    db.commit()
-    return {"msg": "简历解析成功", "new_entries": count}
+        count = 0
+        for fact in facts:
+            exists = db.exec(
+                select(UserProfile).where(UserProfile.user_id == user.id, UserProfile.content == fact.content)).first()
+            if not exists:
+                db.add(UserProfile(user_id=user.id, category=f"resume_{fact.category}", content=fact.content))
+                count += 1
+        db.commit()
+        return {"msg": "简历解析成功", "new_entries": count}
+    except Exception as e:
+        # 捕获所有异常并返回友好提示
+        return {"msg": "简历解析失败", "new_entries": 0}

@@ -1,3 +1,5 @@
+import asyncio
+
 from app.core.graph_state import AgentState
 from app.core.llm_factory import get_llm
 from app.chains.jd_parser import parse_jd_async
@@ -7,7 +9,7 @@ from app.chains.hr_gen import generate_hr_async
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Dict, Any
 from loguru import logger
 # ✅ 引入我们刚才写的工具
 from app.core.stream_manager import send_thought, send_data
@@ -17,9 +19,10 @@ from app.core.retry import retry_async
 
 # --- Node 1: JD Parser ---
 @retry_async(max_retries=3, delay=0.5, backoff=1.5)
-async def jd_parser_node(state: AgentState, config: Optional[dict] = None):
-    # 从配置中获取 thread_id
-    thread_id = config.get("configurable", {}).get("thread_id") if config else None
+async def jd_parser_node(state: AgentState, config: Optional[Dict[str, Any]] = None):
+    # 从state中获取 thread_id
+    thread_id = state.get("thread_id")
+    logger.debug(f"📌 [Parser Node] thread_id from state: {thread_id}")
     await send_thought("🔍 [Parser] 正在深度解析 JD...", "提取核心技术栈", thread_id)
     # ✅ 触发 Dashboard 更新: 步骤高亮
     await send_data("current_step", "parser", thread_id)
@@ -43,15 +46,17 @@ async def jd_parser_node(state: AgentState, config: Optional[dict] = None):
         "years_required": meta.years_required,
         "iteration_count": 0,
         "complexity_level": complexity_level,
-        "active_agents": active_agents
+        "active_agents": active_agents,
+        "thread_id": thread_id  # 确保传递thread_id
     }
 
 
 # --- Node 2: Researcher ---
 @retry_async(max_retries=3, delay=1.0, backoff=2.0)
-async def researcher_node(state: AgentState, config: Optional[dict] = None):
-    # 从配置中获取 thread_id
-    thread_id = config.get("configurable", {}).get("thread_id") if config else None
+async def researcher_node(state: AgentState, config: Optional[Dict[str, Any]] = None):
+    # 从state中获取 thread_id
+    thread_id = state.get("thread_id")
+    logger.debug(f"📌 [Researcher Node] thread_id from state: {thread_id}")
     company = state.get("company_name")
 
     # 1. 预判：如果是模糊指代，直接跳过搜索
@@ -74,14 +79,15 @@ async def researcher_node(state: AgentState, config: Optional[dict] = None):
     ]
     await send_data("rag_sources", mock_sources, thread_id)
 
-    return {"company_info": info}
+    return {"company_info": info, "thread_id": thread_id}
 
 
 # --- Node 3: Tech Lead ---
 @retry_async(max_retries=3, delay=1.0, backoff=2.0)
-async def tech_lead_node(state: AgentState, config: Optional[dict] = None):
-    # 从配置中获取 thread_id
-    thread_id = config.get("configurable", {}).get("thread_id") if config else None
+async def tech_lead_node(state: AgentState, config: Optional[Dict[str, Any]] = None):
+    # 从state中获取 thread_id
+    thread_id = state.get("thread_id")
+    logger.debug(f"📌 [TechLead Node] thread_id from state: {thread_id}")
     await send_thought("💻 [TechLead] 正在构思面试题...", thread_id=thread_id)
     # ✅ 触发 Dashboard 更新
     await send_data("current_step", "tech_lead", thread_id)
@@ -90,22 +96,25 @@ async def tech_lead_node(state: AgentState, config: Optional[dict] = None):
         state["tech_stack"],
         state["years_required"]
     )
-    return {"tech_questions": questions, "iteration_count": state.get("iteration_count", 0) + 1}
+    return {"tech_questions": questions, "iteration_count": state.get("iteration_count", 0) + 1, "thread_id": thread_id}
 
 
 # --- Node 4: HR Agent ---
 @retry_async(max_retries=3, delay=1.0, backoff=2.0)
-async def hr_node(state: AgentState, config: Optional[dict] = None):
-    # 从配置中获取 thread_id
-    thread_id = config.get("configurable", {}).get("thread_id") if config else None
+async def hr_node(state: AgentState, config: Optional[Dict[str, Any]] = None):
+    # 从state中获取 thread_id
+    thread_id = state.get("thread_id")
+    logger.debug(f"📌 [HR Node] thread_id from state: {thread_id}")
     logger.debug("👔 [Agent: HR] 正在生成行为面试题...")
     await send_thought("👔 HR 正在构建行为面试题", "结合 STAR 法则与企业文化", thread_id)
+    # ✅ 触发 Dashboard 更新
+    await send_data("current_step", "hr_agent", thread_id)
 
     questions = await generate_hr_async(
         ["沟通能力", "抗压能力"],
         state.get("company_info", "")
     )
-    return {"hr_questions": questions}
+    return {"hr_questions": questions, "thread_id": thread_id}
 
 
 # --- Node 5: Reviewer ---
@@ -115,11 +124,16 @@ class ReviewResult(BaseModel):
 
 
 @retry_async(max_retries=3, delay=1.0, backoff=2.0)
-async def reviewer_node(state: AgentState, config: Optional[dict] = None):
-    # 从配置中获取 thread_id
-    thread_id = config.get("configurable", {}).get("thread_id") if config else None
+async def reviewer_node(state: AgentState, config: Optional[Dict[str, Any]] = None):
+    # 从state中获取 thread_id
+    thread_id = state.get("thread_id")
+    logger.info(f"📌 [Reviewer Node] 开始执行, thread_id: {thread_id}, 当前时间: {asyncio.get_event_loop().time()}")
+    logger.debug(f"📌 [Reviewer Node] thread_id from state: {thread_id}")
     logger.debug("⚖️ [Agent: QA] 正在审核题目质量...")
     await send_thought("⚖️ 质检员正在审核题目质量", "评估深度、准确性与匹配度", thread_id)
+    # ✅ 触发 Dashboard 更新
+    await send_data("current_step", "reviewer", thread_id)
+    logger.info(f"📌 [Reviewer Node] send_thought 调用完成, thread_id: {thread_id}, 当前时间: {asyncio.get_event_loop().time()}")
 
     llm = get_llm(temperature=0.1)
     parser = JsonOutputParser(pydantic_object=ReviewResult)
@@ -148,13 +162,14 @@ async def reviewer_node(state: AgentState, config: Optional[dict] = None):
     # 将评分结果也推给前端
     await send_thought(f"📊 质检完成，评分: {result['score']}", f"评语: {result.get('comment', '无')}", thread_id)
 
-    return {"quality_score": result['score'], "review_comment": result['comment']}
+    return {"quality_score": result['score'], "review_comment": result['comment'], "thread_id": thread_id}
 
 
 # --- Node 6: Human Approval ---
-async def human_approval_node(state: AgentState, config: Optional[dict] = None):
-    # 从配置中获取 thread_id
-    thread_id = config.get("configurable", {}).get("thread_id") if config else None
+async def human_approval_node(state: AgentState, config: Optional[Dict[str, Any]] = None):
+    # 从state中获取 thread_id
+    thread_id = state.get("thread_id")
+    logger.debug(f"📌 [Human Approval Node] thread_id from state: {thread_id}")
     logger.debug("🛑 [System] 任务暂停：等待人工审核...")
     await send_thought("🛑 任务已暂停", "等待人工审核与决策...", thread_id)
     
@@ -180,8 +195,9 @@ async def human_approval_node(state: AgentState, config: Optional[dict] = None):
         return {
             "quality_score": 90,
             "review_comment": f"人工审核通过: {state['human_feedback']}",
-            "human_feedback": None  # 清空反馈，避免重复应用
+            "human_feedback": None,  # 清空反馈，避免重复应用
+            "thread_id": thread_id
         }
     
     # 如果没有人工反馈，继续等待（由前端通过API提交反馈）
-    return {}
+    return {"thread_id": thread_id}

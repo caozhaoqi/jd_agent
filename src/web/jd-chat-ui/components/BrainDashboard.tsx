@@ -14,6 +14,7 @@ export default function BrainDashboard({ data }: { data: DashboardState }) {
   const steps = [
     { id: "parser", label: "JD 解析" },
     { id: "researcher", label: "背景调查" },
+    { id: "hr_agent", label: "行为出题" },
     { id: "tech_lead", label: "技术出题" },
     { id: "reviewer", label: "质量检测" },
   ];

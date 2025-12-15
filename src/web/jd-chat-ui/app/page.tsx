@@ -14,7 +14,8 @@ import BrainDashboard, { DashboardState } from "@/components/BrainDashboard";
 // Hooks
 import { useChat } from "@/hooks/useChat"; // 引入刚才写的 Hook
 import { API_BASE } from "@/hooks/useChat";
-import { Session, ChatMode } from "@/types/chat";
+import {  ChatMode, Session } from "@/types/chat";
+// import { Session } from "inspector";
 
 const ChatInput = dynamic(() => import("@/components/ChatInput"), { ssr: false });
 

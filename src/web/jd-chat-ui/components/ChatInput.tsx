@@ -11,9 +11,10 @@ interface ChatInputProps {
   onSend: (text: string) => void;
   onFileUpload: (file: File) => void;
   onAudioUpload: (blob: Blob) => void;
+  placeholder?: string;
 }
 
-export default function ChatInput({ mode, isLoading, onSend, onFileUpload, onAudioUpload }: ChatInputProps) {
+export default function ChatInput({ mode, isLoading, onSend, onFileUpload, onAudioUpload, placeholder }: ChatInputProps) {
   const [input, setInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,7 +48,7 @@ export default function ChatInput({ mode, isLoading, onSend, onFileUpload, onAud
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={mode === 'guide' ? "发送岗位 JD..." : "请输入你的回答..."}
+          placeholder={placeholder || (mode === 'guide' ? "发送岗位 JD..." : "请输入你的回答...")}
           className="w-full resize-none border-none outline-none text-gray-700 px-3 py-2 max-h-[150px] min-h-[44px]"
           rows={1}
         />

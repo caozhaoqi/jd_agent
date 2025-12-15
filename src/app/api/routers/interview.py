@@ -85,131 +85,154 @@ async def stream_generate_guide(
     - type='intermediate': 中间处理步骤信息
     """
     try:
-        # 创建共享队列
-        shared_queue = asyncio.Queue()
+        thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
         
-        # 测试用：模拟用户和数据库
-        from app.core.models import User
-        from sqlmodel import Session
-        # 测试账户
-        # user = User(id=1, username="test_user", email="test@example.com")
-        # db = None
-
-        # 2. 定义后台运行任务
-        async def run_graph_background():
+        async def generate_and_stream():
             try:
-                initial_state = {
-                    "jd_text": request.jd_text,
-                    "user_id": user.id,
-                    "iteration_count": 0,
-                    "tech_stack": [],
-                    "years_required": "",
-                    "company_name": ""
-                }
-
-                thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
-                config = {"configurable": {"thread_id": thread_id}}
+                # 获取队列
+                from app.core.stream_manager import get_stream_queue
                 
-                # 将队列与thread_id关联
-                init_stream_queue(shared_queue, thread_id)
-
-                # 运行 Graph
-                final_state = await app_graph.ainvoke(initial_state, config=config)
-
-                # 运行结束，把最终结果构造成 token 类型发出去
-                # 注意：这里我们把整个 Report 打包成一个 JSON 字符串发过去
-                # 前端收到 type='result' 时，直接渲染最终报告
-                from app.schemas.interview import InterviewReport, JDMetaData
-
-                # --- 🟢 核心修复开始 ---
-                # 1. 处理 Technical Questions
-                raw_tech_qs = final_state.get("tech_questions", [])
-                # 如果是 Pydantic 对象，转为 dict；如果是 dict (如解析失败fallback)，保持原样
-                tech_qs_dicts = [
-                    q.model_dump() if hasattr(q, "model_dump") else q
-                    for q in raw_tech_qs
-                ]
-
-                # 2. 处理 HR Questions
-                raw_hr_qs = final_state.get("hr_questions", [])
-                hr_qs_dicts = [
-                    q.model_dump() if hasattr(q, "model_dump") else q
-                    for q in raw_hr_qs
-                ]
-
-                # ... 组装 Report 逻辑 (同 interview_service) ...
-                # 为了演示，简单组装
-                # 简单构造 Meta
-                final_meta = {
-                    "company_name": final_state.get("company_name"),
-                    "tech_stack": final_state.get("tech_stack"),
-                    "years_required": final_state.get("years_required"),
-                    "soft_skills": []  # 暂空
-                }
-
-                final_report = {
-                    "meta": final_meta,
-                    "tech_questions": tech_qs_dicts,
-                    "hr_questions": hr_qs_dicts,
-                    "company_analysis": final_state.get("company_info"),
-                    "session_id": None
-                }
-
-                # --- 存库逻辑 (可选，建议加上) ---
-                try:
-                    if db is not None:
-                        title = f"{final_meta['company_name']} 面试准备" if final_meta['company_name'] else "JD 分析"
-                        new_sess = ChatSession(title=title, user_id=user.id)
-                        db.add(new_sess)
-                        db.commit()
-                        db.refresh(new_sess)
-                        final_report["session_id"] = new_sess.id
-                        # 保存消息
-                        db.add(ChatMessage(session_id=new_sess.id, role="user", content=request.jd_text))
-                        db.add(ChatMessage(session_id=new_sess.id, role="assistant", content=json.dumps(final_report)))
-                        db.commit()
-                except Exception as db_e:
-                    logger.error(f"DB Error: {db_e}")
-
-                await shared_queue.put({
-                    "type": "result",  # 标记为最终结果
-                    "content": json.dumps(final_report)
-                })
-
-            except Exception as e:
-                logger.error(f"❌ [Graph Error] {e}")  # 打印错误堆栈
-                await shared_queue.put({"type": "error", "content": {
-                    "status": "error",
-                    "code": ErrorCode.JD_PARSE_ERROR,
-                    "message": "生成面试指南失败",
-                    "details": {"error": str(e)}
-                }})
-
-            finally:
+                # 创建一个队列用于收集所有需要发送的消息
+                message_queue = asyncio.Queue()
+                
+                # 定义一个协程来处理 stream_manager 队列中的消息
+                async def process_stream_queue():
+                    queue = get_stream_queue(thread_id)
+                    if not queue:
+                        return
+                    
+                    try:
+                        while True:
+                            msg = await queue.get()
+                            if msg is None:  # 结束信号
+                                break
+                            # 将消息添加到消息队列
+                            payload = json.dumps(msg, ensure_ascii=False)
+                            await message_queue.put(f"data: {payload}\n\n")
+                    except Exception as e:
+                        logger.error(f"❌ [Queue Error] {e}")
+                        # 发送错误信息
+                        error_payload = json.dumps({"type": "error", "content": str(e)}, ensure_ascii=False)
+                        await message_queue.put(f"data: {error_payload}\n\n")
+                
+                # 定义一个协程来生成报告
+                async def generate_report():
+                    try:
+                        # 1. 准备初始状态
+                        initial_state = {
+                            "jd_text": request.jd_text,
+                            "user_id": user.id,
+                            "iteration_count": 0,
+                            "tech_stack": [],
+                            "years_required": "",
+                            "company_name": ""
+                        }
+                        
+                        config = {"configurable": {"thread_id": thread_id}}
+                        
+                        # 2. 运行 Graph
+                        final_state = await app_graph.ainvoke(initial_state, config=config)
+                        
+                        # 3. 处理并发送最终结果
+                        # --- 组装 Report 逻辑 ---
+                        # 1. 处理 Technical Questions
+                        raw_tech_qs = final_state.get("tech_questions", [])
+                        tech_qs_dicts = [
+                            q.model_dump() if hasattr(q, "model_dump") else q
+                            for q in raw_tech_qs
+                        ]
+                        
+                        # 2. 处理 HR Questions
+                        raw_hr_qs = final_state.get("hr_questions", [])
+                        hr_qs_dicts = [
+                            q.model_dump() if hasattr(q, "model_dump") else q
+                            for q in raw_hr_qs
+                        ]
+                        
+                        # 3. 简单构造 Meta
+                        final_meta = {
+                            "company_name": final_state.get("company_name"),
+                            "tech_stack": final_state.get("tech_stack"),
+                            "years_required": final_state.get("years_required"),
+                            "soft_skills": []  # 暂空
+                        }
+                        
+                        final_report = {
+                            "meta": final_meta,
+                            "tech_questions": tech_qs_dicts,
+                            "hr_questions": hr_qs_dicts,
+                            "company_analysis": final_state.get("company_info"),
+                            "session_id": None
+                        }
+                        
+                        # --- 存库逻辑 ---
+                        try:
+                            if db is not None:
+                                title = f"{final_meta['company_name']} 面试准备" if final_meta['company_name'] else "JD 分析"
+                                new_sess = ChatSession(title=title, user_id=user.id)
+                                db.add(new_sess)
+                                db.commit()
+                                db.refresh(new_sess)
+                                final_report["session_id"] = new_sess.id
+                                # 保存消息
+                                db.add(ChatMessage(session_id=new_sess.id, role="user", content=request.jd_text))
+                                db.add(ChatMessage(session_id=new_sess.id, role="assistant", content=json.dumps(final_report)))
+                                db.commit()
+                        except Exception as db_e:
+                            logger.error(f"DB Error: {db_e}")
+                        
+                        # 发送最终结果
+                        result_payload = json.dumps({
+                            "type": "result",
+                            "content": json.dumps(final_report)
+                        }, ensure_ascii=False)
+                        await message_queue.put(f"data: {result_payload}\n\n")
+                        
+                    except Exception as e:
+                        logger.error(f"❌ [Generate Report Error] {e}")
+                        # 发送错误信息
+                        error_payload = json.dumps({"type": "error", "content": str(e)}, ensure_ascii=False)
+                        await message_queue.put(f"data: {error_payload}\n\n")
+                
+                # 并行运行所有协程
+                report_task = asyncio.create_task(generate_report())
+                queue_task = asyncio.create_task(process_stream_queue())
+                
+                # 实时发送消息队列中的内容
+                while True:
+                    # 检查报告和队列任务是否都完成
+                    if report_task.done() and queue_task.done():
+                        break
+                    
+                    try:
+                        # 非阻塞地获取消息，如果没有消息则继续循环
+                        msg = await asyncio.wait_for(message_queue.get(), timeout=0.1)
+                        if msg is not None:
+                            yield msg
+                    except asyncio.TimeoutError:
+                        # 没有消息，继续循环
+                        continue
+                
                 # 发送结束信号
-                await shared_queue.put(None)
-
-        # 3. 启动后台任务
-        task = asyncio.create_task(run_graph_background())
-
-        # 4. 定义生成器 (消费队列)
-        async def event_generator():
-            while True:
-                # 等待队列消息
-                data = await shared_queue.get()
-
-                if data is None:  # 结束信号
-                    yield "data: [DONE]\n\n"
-                    break
-
-                # 发送 SSE
-                yield f"data: {json.dumps(data)}\n\n"
-
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+                yield "data: [DONE]\n\n"
+                
+            finally:
+                # 清除队列
+                from app.core.stream_manager import clear_queue
+                clear_queue(thread_id)
+        
+        return StreamingResponse(
+            generate_and_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
     except Exception as e:
         logger.error(f"❌ [Stream Generate Guide Error] {e}")
         # 对于流式响应，我们需要在生成器中处理错误
-        # 这里返回一个包含错误信息的流式响应
         async def error_generator():
             error_data = {
                 "type": "error",
