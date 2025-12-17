@@ -102,3 +102,11 @@ class RAGRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str = Field(..., description="待转换的文本")
 
+
+
+# 定义请求模型
+class ResumeJDMatchRequest(BaseModel):
+    resume_text: str
+    jd_text: str
+
+

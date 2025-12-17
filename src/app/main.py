@@ -13,6 +13,7 @@ from app.utils.logger import logger
 # 🔴 导入路由和数据库初始化函数
 from app.core.db_auth import create_db_and_tables
 from app.api.api_v1 import api_router
+from app.api.api_v2 import api_router as api_router_v2
 
 # 加载 .env
 load_dotenv()
@@ -148,7 +149,8 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 # 注册路由
-app.include_router(api_router, prefix="/api/v1", tags=["Interview"])
+app.include_router(api_router, prefix="/api/v1", tags=["Interview v1"])
+app.include_router(api_router_v2, prefix="/api/v2", tags=["Interview v2"])
 
 
 @app.get("/", tags=["System"])

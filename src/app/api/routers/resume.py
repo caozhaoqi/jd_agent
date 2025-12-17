@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, UploadFile, File
 from sqlmodel import Session, select
 from app.api.deps import get_current_user, get_session
-from app.core.models import User, UserProfile
+from app.core.models import User, UserProfile, ResumeJDMatchRequest
 from app.utils.file_parser import parse_resume_file
 from app.chains.resume_extractor import extract_resume_features
+from app.chains.resume_jd_matcher import match_resume_with_jd
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -33,3 +35,41 @@ async def upload_resume(
     except Exception as e:
         # 捕获所有异常并返回友好提示
         return {"msg": "简历解析失败", "new_entries": 0}
+
+
+@router.post("/match")
+async def match_resume_jd(
+        request: ResumeJDMatchRequest,
+        user: User = Depends(get_current_user)
+):
+    """
+    匹配简历与JD的API接口
+    
+    Args:
+        request: 包含简历文本和JD文本的请求体
+        user: 当前登录用户
+        
+    Returns:
+        匹配结果包含总体匹配度、优势、不足、建议和详细匹配项
+    """
+    try:
+        match_result = await match_resume_with_jd(
+            resume_text=request.resume_text,
+            jd_text=request.jd_text
+        )
+        return {
+            "msg": "匹配成功",
+            "result": match_result
+        }
+    except Exception as e:
+        # 捕获所有异常并返回友好提示
+        return {
+            "msg": "匹配失败",
+            "result": {
+                "overall_score": 0,
+                "strengths": [],
+                "weaknesses": [],
+                "suggestions": [],
+                "detailed_matches": []
+            }
+        }
