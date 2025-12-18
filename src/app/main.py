@@ -1,4 +1,19 @@
 import uvicorn
+import os
+
+# ===== 添加在文件最开头 =====
+# 设置HuggingFace国内镜像源
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ['HF_HOME'] = './.huggingface'
+os.environ['TRANSFORMERS_CACHE'] = './.transformers_cache'
+os.environ['SENTENCE_TRANSFORMERS_HOME'] = './.sentence_transformers'
+
+print("=" * 50)
+print("🎯 HuggingFace配置信息:")
+print(f"🔗 镜像源: {os.environ.get('HF_ENDPOINT')}")
+print(f"📁 缓存目录: {os.environ.get('HF_HOME')}")
+print("=" * 50)
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

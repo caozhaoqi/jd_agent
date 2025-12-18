@@ -1,5 +1,5 @@
 ./src/run/log_dir/
-/venv/
+.venv/
 /.idea
 ./src/run/wechat_logs.log
 ./src/run/wechat_logs/
@@ -7,3 +7,15 @@
 ./src/spider/video/
 ./src/video_process/data/
 .env
+.pytest_cache/
+blog_faiss_index/
+logs/
+.idea/
+./idea/
+./confluence_data/
+./confluence_faiss_index/
+./confluence_pdf_documents/
+./confluence_word_documents/
+./blog_pdf_documents/
+.env.example
+

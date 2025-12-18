@@ -6,12 +6,14 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
+from loguru import logger
 
 from app.api.deps import get_current_user, get_session
 from app.core.models import User, ChatSession, ChatMessage, ChatRequest
 from app.core.llm_factory import get_llm
 from app.core.stream_manager import init_stream_queue
 from app.core.sse_manager import sse_manager
+from app.chains.rag_chain import ask_knowledge_base
 
 router = APIRouter()
 
@@ -90,16 +92,68 @@ async def stream_chat(
         client_id, send_queue = await sse_manager.add_connection()
         
         try:
-            # --- A. 发送思考过程 (Thought) ---
-            # 即使是普通对话，发送一个思考状态也能让 UI 看起来更高级，且保持格式一致
-            thought_payload = json.dumps({
-                "type": "thought",
-                "content": "正在分析上下文与面试意图..."
-            }, ensure_ascii=False)
+            # --- 知识库查询判断 --- 
+            knowledge_context = ""
+            has_knowledge = False
             
-            # 发送到SSE连接管理器和直接yield
-            await send_queue.put(f"data: {thought_payload}\n\n")
-            yield f"data: {thought_payload}\n\n"
+            # 判断是否需要查询知识库
+            last_user_question = req.content.strip().lower()
+            # 简单的判断逻辑：如果问题涉及技术面试、编程、公司、岗位等关键词，或者问题很具体
+            should_query_knowledge = any(keyword in last_user_question for keyword in 
+                                         ["什么是", "如何", "怎么", "为什么", "技术", "编程", "面试", 
+                                          "岗位", "公司", "职责", "要求", "技能", "学习", "准备"])
+            
+            if should_query_knowledge:
+                # --- A. 发送思考过程 (Thought) ---
+                thought_payload = json.dumps({
+                    "type": "thought",
+                    "content": "正在分析问题并查询知识库..."
+                }, ensure_ascii=False)
+                
+                # 发送到SSE连接管理器和直接yield
+                await send_queue.put(f"data: {thought_payload}\n\n")
+                yield f"data: {thought_payload}\n\n"
+                
+                # 查询知识库
+                try:
+                    rag_result = await ask_knowledge_base(last_user_question)
+                    if rag_result and rag_result["sources"]:
+                        has_knowledge = True
+                        knowledge_context = rag_result["answer"]
+                        sources = rag_result["sources"]
+                        
+                        # 发送知识库检索完成的思考
+                        thought_payload = json.dumps({
+                            "type": "thought",
+                            "content": "知识库检索完成，正在融合上下文生成回答..."
+                        }, ensure_ascii=False)
+                        await send_queue.put(f"data: {thought_payload}\n\n")
+                        yield f"data: {thought_payload}\n\n"
+                    else:
+                        thought_payload = json.dumps({
+                            "type": "thought",
+                            "content": "知识库中未找到相关信息，正在直接生成回答..."
+                        }, ensure_ascii=False)
+                        await send_queue.put(f"data: {thought_payload}\n\n")
+                        yield f"data: {thought_payload}\n\n"
+                except Exception as e:
+                    logger.debug(f"知识库查询失败: {str(e)}")
+                    thought_payload = json.dumps({
+                        "type": "thought",
+                        "content": "知识库查询失败，正在直接生成回答..."
+                    }, ensure_ascii=False)
+                    await send_queue.put(f"data: {thought_payload}\n\n")
+                    yield f"data: {thought_payload}\n\n"
+            else:
+                # --- A. 发送思考过程 (Thought) ---
+                thought_payload = json.dumps({
+                    "type": "thought",
+                    "content": "正在分析上下文与面试意图..."
+                }, ensure_ascii=False)
+                
+                # 发送到SSE连接管理器和直接yield
+                await send_queue.put(f"data: {thought_payload}\n\n")
+                yield f"data: {thought_payload}\n\n"
 
             # 稍微停顿一下让用户看到思考动画 (可选)
             await asyncio.sleep(0.5)
@@ -107,17 +161,38 @@ async def stream_chat(
             # --- B. 发送内容流 (Token) ---
             full_response = ""
             try:
-                async for chunk in chain.astream(lc_messages):
-                    full_response += chunk
-                    # ✅ 关键修改：包装为 JSON 格式，匹配前端 readStream 的解析逻辑
-                    token_payload = json.dumps({
-                        "type": "token",
-                        "content": chunk
-                    }, ensure_ascii=False)
+                # 如果有知识库上下文，重新构建系统提示和消息
+                if has_knowledge and knowledge_context:
+                    # 更新系统提示，包含知识库信息
+                    enhanced_system_prompt = f"{system_prompt}\n\n【知识库参考信息】：\n{knowledge_context}"
                     
-                    # 发送到SSE连接管理器和直接yield
-                    await send_queue.put(f"data: {token_payload}\n\n")
-                    yield f"data: {token_payload}\n\n"
+                    # 重新构建消息列表
+                    enhanced_lc_messages = [SystemMessage(content=enhanced_system_prompt)]
+                    for m in recent_msgs:
+                        if m.role == "user":
+                            enhanced_lc_messages.append(HumanMessage(content=m.content))
+                        else:
+                            enhanced_lc_messages.append(AIMessage(content=m.content))
+                    
+                    # 使用增强的消息列表生成回答
+                    async for chunk in chain.astream(enhanced_lc_messages):
+                        full_response += chunk
+                        token_payload = json.dumps({
+                            "type": "token",
+                            "content": chunk
+                        }, ensure_ascii=False)
+                        await send_queue.put(f"data: {token_payload}\n\n")
+                        yield f"data: {token_payload}\n\n"
+                else:
+                    # 使用原始消息列表生成回答
+                    async for chunk in chain.astream(lc_messages):
+                        full_response += chunk
+                        token_payload = json.dumps({
+                            "type": "token",
+                            "content": chunk
+                        }, ensure_ascii=False)
+                        await send_queue.put(f"data: {token_payload}\n\n")
+                        yield f"data: {token_payload}\n\n"
             except Exception as e:
                 # 发送错误信息
                 err_payload = json.dumps({"type": "token", "content": f"\n[Error]: {str(e)}"})

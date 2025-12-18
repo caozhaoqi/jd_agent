@@ -28,9 +28,11 @@ except Exception as e:
 async def transcribe_audio(file: UploadFile = File(...)):
     """
     ASR: 语音转文字 (适配 SiliconFlow SenseVoiceSmall)
+    支持音频和视频文件输入
     """
     from openai import OpenAI
     from app.core.config import settings
+    from app.utils.video_utils import extract_audio_from_video_bytes
 
     # 1. 初始化客户端
     # 确保使用的是支持 Audio 的 API Key (如 SiliconFlow)
@@ -42,16 +44,22 @@ async def transcribe_audio(file: UploadFile = File(...)):
     try:
         # 2. 读取文件二进制内容
         file_content = await file.read()
+        filename = file.filename or "media.wav"
+        
+        # 3. 检测是否为视频文件
+        video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm']
+        is_video = any(filename.lower().endswith(ext) for ext in video_extensions)
+        
+        # 4. 如果是视频文件，先提取音频
+        if is_video:
+            file_content = extract_audio_from_video_bytes(file_content, filename)
+            filename = "extracted_audio.wav"
 
-        # 3. 构造 OpenAI SDK 认可的文件元组 (关键修复!)
+        # 5. 构造 OpenAI SDK 认可的文件元组 (关键修复!)
         # 格式: (文件名, 二进制数据, MIME类型)
-        # 如果 file.filename 为空，强制给一个 "audio.wav"
-        filename = file.filename or "audio.wav"
-
-        # 强制指定 MIME 类型，SiliconFlow 对此很敏感
         file_tuple = (filename, file_content, "audio/wav")
 
-        # 4. 调用 API
+        # 6. 调用 API
         transcript = client.audio.transcriptions.create(
             model=settings.ASR_MODEL,  # 确保 .env 是 FunAudioLLM/SenseVoiceSmall
             file=file_tuple,  # 传入构造好的元组

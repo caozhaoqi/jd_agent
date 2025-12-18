@@ -36,3 +36,6 @@ class AgentState(TypedDict):
     active_agents: List[str]  # 当前激活的智能体
     task_priority: Optional[str]  # 任务优先级
     complexity_level: Optional[str]  # JD复杂度等级
+    
+    # --- 进度消息队列 ---
+    progress_messages: List[str]  # 用于存储实时进度消息

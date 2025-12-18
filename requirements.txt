@@ -46,3 +46,18 @@ loguru>=0.7.2
 # --- Audio Transcoding (音频转码) ---
 pydub>=0.25.1
 # pydub用于音频格式转换，实现跨平台统一音频格式
+
+# --- Video Processing (视频处理) ---
+ffmpeg-python>=0.2.0
+moviepy>=1.0.3
+# ffmpeg-python和moviepy用于视频转音频功能
+
+# --- Confluence Export (Confluence导出功能) ---
+pdfkit>=1.0.0
+# pdfkit用于HTML转PDF功能
+atlassian-python-api>=3.0.0
+# atlassian-python-api用于Confluence API访问
+python-docx>=0.8.11
+# python-docx用于Word文档生成
+beautifulsoup4>=4.12.0
+# beautifulsoup4用于HTML解析
