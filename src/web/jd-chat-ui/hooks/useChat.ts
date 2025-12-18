@@ -183,8 +183,25 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
                 body: JSON.stringify({ question: text })
             });
 
-            if (!res.ok) throw new Error(await res.text());
+            console.log("RAG API Response Status:", res.status);
+            console.log("RAG API Response Headers:", res.headers);
+
+            if (!res.ok) {
+                const errorText = await res.text();
+                try {
+                    // 尝试解析JSON格式的错误信息
+                    const errorData = JSON.parse(errorText);
+                    console.error("RAG API Error JSON:", errorData);
+                    throw new Error(errorData.detail || errorData.message || errorText);
+                } catch (parseError) {
+                    // 如果不是JSON，直接使用文本错误信息
+                    console.error("RAG API Non-JSON error response:", errorText);
+                    console.error("RAG API Parse Error:", parseError);
+                    throw new Error(errorText);
+                }
+            }
             const data = await res.json();
+            console.log("RAG API Response Data:", data);
 
             const formatted = formatRAGResponse(data);
             setMessages(prev => {

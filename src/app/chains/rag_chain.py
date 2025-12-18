@@ -124,26 +124,41 @@ def get_rag_chain(streaming: bool = False):
     return chain
 
 
+# 5. 查询改写链 (用于流式查询)
+rewrite_prompt = ChatPromptTemplate.from_template(
+    """你是一个专业的搜索引擎优化助手。
+    请将用户的输入转换为一个更精准、语义更丰富的查询语句，以便在技术知识库中进行向量检索。
+
+    要求：
+    1. 补全相关的技术上下文（例如 "unity" -> "Unity3D 游戏引擎开发"）。
+    2. 如果是具体问题，保持原意但使其更书面化。
+    3. 仅输出改写后的查询语句，不要包含任何解释。
+    4. 所有生成内容必须使用中文。
+
+    用户输入: {x}
+    改写后的查询:"""
+)
+
+# 延迟初始化 rewrite_llm 和 rewrite_chain，避免导入时就创建
+rewrite_chain = None
+
+
+def get_rewrite_chain():
+    """
+    获取查询改写链
+    """
+    global rewrite_chain
+    if rewrite_chain is None:
+        rewrite_llm = get_llm(temperature=0.5)  # 给一点创造力
+        rewrite_chain = rewrite_prompt | rewrite_llm | StrOutputParser()
+    return rewrite_chain
+
+
 # app/chains/rag_chain.py
 async def ask_knowledge_base(question: str):
     # 🚀 优化步骤 1: 查询改写 (Query Rewriting)
     # 目的：将用户的短词 (如 "unity") 扩写为语义更丰富的句子，提高检索准确率
-    rewrite_llm = get_llm(temperature=0.5)  # 给一点创造力
-    rewrite_prompt = ChatPromptTemplate.from_template(
-        """你是一个专业的搜索引擎优化助手。
-        请将用户的输入转换为一个更精准、语义更丰富的查询语句，以便在技术知识库中进行向量检索。
-
-        要求：
-        1. 补全相关的技术上下文（例如 "unity" -> "Unity3D 游戏引擎开发"）。
-        2. 如果是具体问题，保持原意但使其更书面化。
-        3. 仅输出改写后的查询语句，不要包含任何解释。
-        4. 所有生成内容必须使用中文。
-
-        用户输入: {x}
-        改写后的查询:"""
-    )
-
-    rewrite_chain = rewrite_prompt | rewrite_llm | StrOutputParser()
+    rewrite_chain = get_rewrite_chain()
 
     # 获取改写后的问题
     better_question = await rewrite_chain.ainvoke({"x": question})

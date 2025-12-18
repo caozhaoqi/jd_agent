@@ -42,7 +42,7 @@ async def stream_query_knowledge_base(request: RAGRequest):
     """
     try:
         from app.chains.rag_chain import (
-            rewrite_chain,
+            get_rewrite_chain,
             format_docs_with_source,
             extract_sources,
         )
@@ -51,6 +51,7 @@ async def stream_query_knowledge_base(request: RAGRequest):
         from app.core.config import settings
 
         # 1. 查询改写
+        rewrite_chain = get_rewrite_chain()
         better_question = await rewrite_chain.ainvoke({"x": request.question})
 
         # 2. 检索文档
