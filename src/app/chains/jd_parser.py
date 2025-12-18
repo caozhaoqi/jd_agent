@@ -25,9 +25,8 @@ async def parse_jd_async(jd_text: str) -> JDMetaData:
     chain = prompt | llm | parser
 
     # 注意：这里使用的是 ainvoke (Async Invoke)
-    result = await chain.ainvoke({
-        "jd_text": jd_text,
-        "format_instructions": parser.get_format_instructions()
-    })
+    result = await chain.ainvoke(
+        {"jd_text": jd_text, "format_instructions": parser.get_format_instructions()}
+    )
 
     return result

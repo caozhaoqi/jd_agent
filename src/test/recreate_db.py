@@ -19,15 +19,13 @@ print("正在创建测试用户...")
 with Session(engine) as session:
     hashed_password = get_password_hash("test_password")
     user = User(
-        username="test_user",
-        email="test@example.com",
-        hashed_password=hashed_password
+        username="test_user", email="test@example.com", hashed_password=hashed_password
     )
     session.add(user)
     session.commit()
     session.refresh(user)
     print(f"测试用户创建成功: ID={user.id}, 用户名={user.username}, 邮箱={user.email}")
-    
+
     # 生成JWT令牌
     token = create_access_token(data={"sub": user.username})
     print(f"JWT令牌: {token}")

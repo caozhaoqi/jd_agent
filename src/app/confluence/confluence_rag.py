@@ -6,7 +6,7 @@ from langchain_community.vectorstores import FAISS
 from app.utils.logger import logger
 
 # 设置HuggingFace国内镜像
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 # 确定向量库路径
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +16,7 @@ DB_PATH = os.path.join(PROJECT_ROOT, "confluence_faiss_index")
 
 class ConfluenceKnowledgeBase:
     """Confluence Wiki知识库类，使用单例模式"""
+
     _instance = None
 
     def __new__(cls):
@@ -46,34 +47,38 @@ class ConfluenceKnowledgeBase:
             # 2. 初始化 Embedding 模型
             self.embeddings = HuggingFaceEmbeddings(
                 model_name="BAAI/bge-small-zh-v1.5",
-                model_kwargs={'device': device},
-                encode_kwargs={'normalize_embeddings': True}
+                model_kwargs={"device": device},
+                encode_kwargs={"normalize_embeddings": True},
             )
 
             # 3. 加载 FAISS 向量库
             if os.path.exists(DB_PATH):
                 self.vector_store = FAISS.load_local(
-                    DB_PATH,
-                    self.embeddings,
-                    allow_dangerous_deserialization=True
+                    DB_PATH, self.embeddings, allow_dangerous_deserialization=True
                 )
-                logger.success(f"✅ [Confluence KB] Vector Store loaded successfully from: {DB_PATH}")
+                logger.success(
+                    f"✅ [Confluence KB] Vector Store loaded successfully from: {DB_PATH}"
+                )
             else:
-                logger.warning(f"⚠️ [Confluence KB] Index not found at {DB_PATH}. Knowledge base functionality disabled.")
+                logger.warning(
+                    f"⚠️ [Confluence KB] Index not found at {DB_PATH}. Knowledge base functionality disabled."
+                )
                 self.vector_store = None
 
         except Exception as e:
             logger.error(f"❌ [Confluence KB] Initialization failed: {e}")
             self.vector_store = None
 
-    def search(self, query: str, top_k: int = 3) -> Dict[str, Union[str, List[Dict[str, Any]]]]:
+    def search(
+        self, query: str, top_k: int = 3
+    ) -> Dict[str, Union[str, List[Dict[str, Any]]]]:
         """
         检索相关文档
-        
+
         Args:
             query: 查询字符串
             top_k: 返回结果数量
-            
+
         Returns:
             包含上下文和来源链接的字典
         """
@@ -98,22 +103,23 @@ class ConfluenceKnowledgeBase:
                 title = doc.metadata.get("title", "未知标题")
                 page_id = doc.metadata.get("page_id", "未知ID")
                 space_name = doc.metadata.get("space_name", "未知空间")
-                
-                # 记录来源
-                sources.append({
-                    "title": title,
-                    "url": source,
-                    "page_id": page_id,
-                    "space_name": space_name
-                })
-                
-                # 格式化文档内容
-                context_parts.append(f"---[页面: {title} (来自: {space_name})]---\n{doc.page_content}")
 
-            return {
-                "context": "\n\n".join(context_parts),
-                "sources": sources
-            }
+                # 记录来源
+                sources.append(
+                    {
+                        "title": title,
+                        "url": source,
+                        "page_id": page_id,
+                        "space_name": space_name,
+                    }
+                )
+
+                # 格式化文档内容
+                context_parts.append(
+                    f"---[页面: {title} (来自: {space_name})]---\n{doc.page_content}"
+                )
+
+            return {"context": "\n\n".join(context_parts), "sources": sources}
         except Exception as e:
             logger.error(f"❌ [Confluence KB] Search failed: {e}")
             return {"context": "", "sources": []}

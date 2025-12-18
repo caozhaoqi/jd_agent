@@ -8,12 +8,14 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from loguru import logger
 
+from app.core.config import settings
 from app.core.llm_factory import get_llm
 from app.core.redis_client import redis_client
 
 
 # ❌ 移除全局初始化，防止启动时因缺少 Key 崩溃
 # search_tool = TavilySearchResults(max_results=3)
+
 
 async def fetch_website_content(url: str) -> str:
     """
@@ -39,10 +41,7 @@ def generate_cache_key(company_name: str) -> str:
     """
     生成公司研究结果的缓存键
     """
-    cache_data = {
-        "company_name": company_name,
-        "version": "1.0"
-    }
+    cache_data = {"company_name": company_name, "version": "1.0"}
     cache_str = json.dumps(cache_data, sort_keys=True)
     cache_key = hashlib.md5(cache_str.encode()).hexdigest()
     return f"company_research:{cache_key}"
@@ -58,7 +57,7 @@ async def research_company(company_name: str) -> str:
     if cached_result:
         logger.info(f"💾 [Research Cache] 命中缓存: {company_name}")
         return cached_result
-    
+
     # --- 1. 兜底逻辑 ---
     if not company_name or len(company_name) < 2 or "某" in company_name:
         return "⚠️ **提示**：JD 未提供具体公司名称，无法进行精确背调。"
@@ -81,9 +80,7 @@ async def research_company(company_name: str) -> str:
 
     # --- 2. 关键词扩展 ---
     # 减少搜索查询数量，提高效率
-    queries = [
-        f"{company_name} 官网 核心业务 融资情况"
-    ]
+    queries = [f"{company_name} 官网 核心业务 融资情况"]
 
     # --- 3. 并行搜索 ---
     search_results = []
@@ -116,8 +113,14 @@ async def research_company(company_name: str) -> str:
             unique_results.append(f"- {content[:150]}")
 
             # 简单的官网探测策略：优先排除第三方平台
-            if not best_url and "官网" in queries[0] and not any(
-                    x in url for x in ["zhihu", "baike", "job", "boss", "36kr", "linkedin"]):
+            if (
+                not best_url
+                and "官网" in queries[0]
+                and not any(
+                    x in url
+                    for x in ["zhihu", "baike", "job", "boss", "36kr", "linkedin"]
+                )
+            ):
                 best_url = url
 
     # --- 5. 深度阅读 (钓大鱼) ---
@@ -175,15 +178,18 @@ async def research_company(company_name: str) -> str:
     chain = prompt | llm | StrOutputParser()
 
     try:
-        summary = await chain.ainvoke({
-            "company_name": company_name,
-            "context": full_context
-        })
-        
+        summary = await chain.ainvoke(
+            {"company_name": company_name, "context": full_context}
+        )
+
         # 缓存结果，有效期7天
-        redis_client.set(generate_cache_key(company_name), summary, expire_seconds=7 * 24 * 3600)
+        redis_client.set(
+            generate_cache_key(company_name),
+            summary,
+            expire_seconds=settings.CACHE_EXPIRATION_COMPANY_RESEARCH,
+        )
         logger.info(f"💾 [Research Cache] 缓存结果: {company_name}")
-        
+
         return summary
     except Exception as e:
         logger.error(f"❌ Summary Gen Error: {e}")

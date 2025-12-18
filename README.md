@@ -18,7 +18,7 @@
 - **💻 Tech Lead**: 基于 JD 技术栈构建硬核面试题。
 - **⚖️ Reviewer (质检员)**: 审核题目质量，评分低于 85 分自动打回重写 (Self-Correction)。
 - **👨‍💼 Human Approval Node**: 支持人工介入审核流程，提供交互式反馈和状态跟踪。
-- **🧠 Brain Dashboard**: 前端实时可视化 Agent 的思维路径、当前步骤与长期记忆。
+- **🧠 Brain Dashboard**: 前端实时可视化 Agent 的思维流转、当前步骤、用户画像标签云和知识库引用相关性评分，优化了步骤进度指示器，提供更直观的状态展示。
 
 ### 🔊 2. 全双工语音交互 (Real-time Voice)
 打造“听得见、说得出”的沉浸式体验：
@@ -99,7 +99,8 @@ cp .env.example .env
 # 编辑 .env 填入你的 API Key (推荐使用 DeepSeek + SiliconFlow 组合)
 
 # 5. 启动服务
-uvicorn src.app.main:app --reload
+cd src && uvicorn app.main:app --reload
+# 服务将运行在 http://127.0.0.1:8000
 ```
 
 **`.env` 配置示例：**
@@ -121,8 +122,8 @@ TAVILY_API_KEY=tvly-xxx
 ### 2. 前端设置 (Frontend)
 
 ```bash
-# 1. 进入前端目录 (假设你在根目录下创建了 jd-chat-ui)
-cd jd-chat-ui
+# 1. 进入前端目录
+cd src/web/jd-chat-ui
 
 # 2. 安装依赖
 npm install
@@ -130,6 +131,10 @@ npm install
 # 3. 启动开发服务器
 npm run dev
 ```
+
+**前端配置说明：**
+- Next.js 开发服务器运行在 [http://localhost:3000](http://localhost:3000)
+- 配置了 API 代理 (`next.config.js`)，将 `/api/v1/*` 请求转发到 `http://127.0.0.1:8000/api/v1/*`，解决跨域问题
 
 打开浏览器访问 [http://localhost:3000](http://localhost:3000) 即可开始使用。
 
@@ -155,16 +160,23 @@ npm run dev
 ```text
 jd_agent/
 ├── src/
-│   ├── app/
+│   ├── app/                 # 后端应用
 │   │   ├── api/             # FastAPI 路由接口 (Stream, Auth, Audio)
 │   │   ├── chains/          # LangChain 原子能力 (Generator, Parser)
 │   │   ├── core/            # 核心配置 (Config, DB, LLM Factory) & 统一错误处理
 │   │   ├── graph/           # LangGraph 多智能体编排 (Nodes, Workflow) - 含人工介入节点
 │   │   └── services/        # 业务逻辑层
-│   ├── components/          # Next.js UI 组件 (ChatInput, Dashboard, AudioQueue)
+│   ├── web/                 # 前端应用
+│   │   └── jd-chat-ui/      # Next.js 前端
+│   │       ├── app/         # 页面组件
+│   │       ├── components/  # UI 组件 (ChatInput, BrainDashboard, AudioQueue)
+│   │       ├── hooks/       # 自定义 Hooks (useChat, useAudio)
+│   │       ├── types/       # TypeScript 类型定义
+│   │       └── next.config.js # Next.js 配置文件 (含 API 代理设置)
 │   └── prompts/             # Prompt YAML 模板管理
 ├── tests/                   # 测试用例
-└── requirements.txt         # 依赖列表
+├── requirements.txt         # 后端依赖列表
+└── README.md                # 项目文档
 ```
 
 ---
@@ -179,6 +191,15 @@ jd_agent/
   - [x] 完善多智能体工作流人工介入机制
   - [x] 优化前端音频队列用户体验
   - [x] 统一系统全局错误处理机制
+- [x] **v3.2**: 可视化与性能优化
+  - [x] Brain Dashboard 可视化增强，优化步骤进度指示器
+  - [x] API 代理配置优化，确保前后端通信稳定
+  - [x] 系统兼容性增强，修复多平台依赖管理问题
+- [x] **v3.3**: 代码质量与可维护性提升
+  - [x] 修复测试文件中所有高优先级 flake8 错误（F541, E999, W293）
+  - [x] 确保所有测试文件符合 PEP8 代码规范
+  - [x] 改进代码缩进、字符串格式化和空白行处理
+  - [x] 提升代码可读性和可维护性
 - [ ] **v4.0**: WebRTC 超低延迟通话 (打断式交互)
 - [ ] **v5.0**: 多模态简历分析 (支持图片/PDF 图表读取)
 

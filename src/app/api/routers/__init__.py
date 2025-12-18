@@ -19,5 +19,5 @@ __all__ = [
     "webrtc",
     "jd",
     "video_analysis",
-    "confluence"
+    "confluence",
 ]

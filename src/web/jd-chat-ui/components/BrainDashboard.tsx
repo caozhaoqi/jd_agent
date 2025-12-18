@@ -93,7 +93,7 @@ export default function BrainDashboard({ data }: { data: DashboardState }) {
                 className="block group p-2 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100"
               >
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-medium text-gray-700 truncate max-w-[180px]">{source.title}</span>
+                  <span className="text-xs font-medium text-gray-700 truncate max-w-[180px] md:max-w-[230px]">{source.title}</span>
                   <ExternalLink size={10} className="text-gray-300 group-hover:text-blue-400" />
                 </div>
                 <div className="flex items-center gap-2">

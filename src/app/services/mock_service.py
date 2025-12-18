@@ -11,19 +11,21 @@ def format_sse(role: str, content: str) -> str:
     """格式化为 SSE 数据包"""
     data = {
         "role": role,  # 'interviewer', 'candidate', 'system', 'reviewer'
-        "content": content
+        "content": content,
     }
     # ensure_ascii=False 保证中文正常显示
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def run_mock_interview_stream(jd_text: str, rounds: int = 3):
+async def run_mock_interview_stream(
+    jd_text: str, interview_type: str = "comprehensive", rounds: int = 3
+):
     """
     生成器函数：控制面试流程并流式输出
     """
     try:
         # 1. 初始化 Agents
-        interviewer = get_interviewer_chain()
+        interviewer = get_interviewer_chain(interview_type)
         candidate = get_candidate_chain()
 
         # 2. 初始化点评 Agent (Reviewer)
@@ -57,10 +59,9 @@ async def run_mock_interview_stream(jd_text: str, rounds: int = 3):
             yield format_sse("system", f"🎤 第 {i + 1} 轮提问中...")
 
             # 面试官思考
-            question = await interviewer.ainvoke({
-                "jd_text": jd_text,
-                "history": history_str
-            })
+            question = await interviewer.ainvoke(
+                {"jd_text": jd_text, "history": history_str}
+            )
 
             chat_history.append(f"面试官: {question}")
             yield format_sse("interviewer", question)
@@ -91,6 +92,7 @@ async def run_mock_interview_stream(jd_text: str, rounds: int = 3):
         yield format_sse("done", "[DONE]")
     except Exception as e:
         from app.schemas import ErrorCode
+
         logger.error(f"Mock interview error: {e}")
         # 发送标准化错误响应
         error_response = {
@@ -99,8 +101,8 @@ async def run_mock_interview_stream(jd_text: str, rounds: int = 3):
                 "status": "error",
                 "code": ErrorCode.AGENT_WORKFLOW_ERROR,
                 "message": "模拟面试过程中发生错误",
-                "details": {"error": str(e)}
-            }
+                "details": {"error": str(e)},
+            },
         }
         yield f"data: {json.dumps(error_response, ensure_ascii=False)}\n\n"
         yield format_sse("done", "[DONE]")

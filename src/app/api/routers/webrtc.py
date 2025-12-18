@@ -6,6 +6,7 @@ from app.core.models import User
 
 router = APIRouter()
 
+
 @router.get("/token")
 async def get_livekit_token(user: User = Depends(get_current_user)):
     api_key = os.getenv("LIVEKIT_API_KEY")

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from app.core.llm_factory import get_llm
 from loguru import logger
 
+
 # 定义输出结构
 class UserFact(BaseModel):
     category: str = Field(description="类别: tech_stack/experience/preference/other")
@@ -43,10 +44,12 @@ async def extract_user_profile(chat_history: str) -> List[UserFact]:
     chain = prompt | llm | parser
 
     try:
-        result = await chain.ainvoke({
-            "chat_history": chat_history,
-            "format_instructions": parser.get_format_instructions()
-        })
+        result = await chain.ainvoke(
+            {
+                "chat_history": chat_history,
+                "format_instructions": parser.get_format_instructions(),
+            }
+        )
         return result.new_facts
     except Exception as e:
         logger.debug(f"❌ Memory extraction failed: {e}")

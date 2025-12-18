@@ -28,7 +28,9 @@ def clean_json_output(text: str) -> str:
     return text.strip()
 
 
-async def generate_hr_async(soft_skills: List[str], company_info: str = "") -> List[InterviewQuestion]:
+async def generate_hr_async(
+    soft_skills: List[str], company_info: str = ""
+) -> List[InterviewQuestion]:
     """
     异步生成 HR 行为面试题
     :param soft_skills: JD 中提取的软技能列表
@@ -63,19 +65,17 @@ async def generate_hr_async(soft_skills: List[str], company_info: str = "") -> L
 
     # ✅ 关键修改：构造包含清洗步骤的 Chain
     chain = (
-            prompt
-            | llm
-            | StrOutputParser()
-            | RunnableLambda(clean_json_output)
-            | parser
+        prompt | llm | StrOutputParser() | RunnableLambda(clean_json_output) | parser
     )
 
     try:
-        result = await chain.ainvoke({
-            "context_str": context_str,
-            "soft_skills": ", ".join(soft_skills),
-            "format_instructions": parser.get_format_instructions()
-        })
+        result = await chain.ainvoke(
+            {
+                "context_str": context_str,
+                "soft_skills": ", ".join(soft_skills),
+                "format_instructions": parser.get_format_instructions(),
+            }
+        )
         return result.questions
     except Exception as e:
         print(f"❌ HR Gen Parse Error: {e}")

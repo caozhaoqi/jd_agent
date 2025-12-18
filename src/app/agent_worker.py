@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli, llm
 from livekit.agents.voice_assistant import VoiceAssistant
 from livekit.plugins import openai, deepgram, siliconflow
-
+import os
 # 假设你封装了 SiliconFlow 的 STT/TTS 插件，或者使用 OpenAI 兼容插件
 # 这里演示标准架构
 
@@ -23,7 +23,7 @@ async def entrypoint(ctx: JobContext):
     llm_model = openai.LLM(
         model="deepseek-ai/DeepSeek-V3",
         base_url="https://api.siliconflow.cn/v1",
-        api_key=os.getenv("AUDIO_API_KEY")
+        api_key=os.getenv("AUDIO_API_KEY"),
     )
 
     # TTS: 语音合成 (OpenAI / EdgeTTS)
@@ -35,7 +35,7 @@ async def entrypoint(ctx: JobContext):
         stt=stt,
         llm=llm_model,
         tts=tts,
-        system_prompt="你是一名严厉的面试官。请简短追问候选人。"
+        system_prompt="你是一名严厉的面试官。请简短追问候选人。",
     )
 
     # 4. 启动助手

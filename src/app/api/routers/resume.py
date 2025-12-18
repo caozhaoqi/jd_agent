@@ -12,9 +12,9 @@ router = APIRouter()
 
 @router.post("/upload")  # URL 建议简化为 /upload，挂载时加前缀 /resume
 async def upload_resume(
-        file: UploadFile = File(...),
-        user: User = Depends(get_current_user),
-        db: Session = Depends(get_session)
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
 ):
     try:
         resume_text = await parse_resume_file(file)
@@ -26,9 +26,18 @@ async def upload_resume(
         count = 0
         for fact in facts:
             exists = db.exec(
-                select(UserProfile).where(UserProfile.user_id == user.id, UserProfile.content == fact.content)).first()
+                select(UserProfile).where(
+                    UserProfile.user_id == user.id, UserProfile.content == fact.content
+                )
+            ).first()
             if not exists:
-                db.add(UserProfile(user_id=user.id, category=f"resume_{fact.category}", content=fact.content))
+                db.add(
+                    UserProfile(
+                        user_id=user.id,
+                        category=f"resume_{fact.category}",
+                        content=fact.content,
+                    )
+                )
                 count += 1
         db.commit()
         return {"msg": "简历解析成功", "new_entries": count}
@@ -39,28 +48,23 @@ async def upload_resume(
 
 @router.post("/match")
 async def match_resume_jd(
-        request: ResumeJDMatchRequest,
-        user: User = Depends(get_current_user)
+    request: ResumeJDMatchRequest, user: User = Depends(get_current_user)
 ):
     """
     匹配简历与JD的API接口
-    
+
     Args:
         request: 包含简历文本和JD文本的请求体
         user: 当前登录用户
-        
+
     Returns:
         匹配结果包含总体匹配度、优势、不足、建议和详细匹配项
     """
     try:
         match_result = await match_resume_with_jd(
-            resume_text=request.resume_text,
-            jd_text=request.jd_text
+            resume_text=request.resume_text, jd_text=request.jd_text
         )
-        return {
-            "msg": "匹配成功",
-            "result": match_result
-        }
+        return {"msg": "匹配成功", "result": match_result}
     except Exception as e:
         # 捕获所有异常并返回友好提示
         return {
@@ -70,6 +74,6 @@ async def match_resume_jd(
                 "strengths": [],
                 "weaknesses": [],
                 "suggestions": [],
-                "detailed_matches": []
-            }
+                "detailed_matches": [],
+            },
         }

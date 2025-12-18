@@ -36,8 +36,10 @@ pydantic-settings>=2.1.0
 python-dotenv>=1.0.0
 httpx>=0.26.0
 redis>=5.0.0
+prometheus-client>=0.19.0
 # httpx 是新一代的异步 HTTP 客户端，FastAPI 和 LangChain 底层常用
 # redis 是 Redis 客户端库，用于缓存功能
+# prometheus-client 用于监控指标收集
 
 # --- Logging (日志工具 - 对应 utils/logger.py) ---
 loguru>=0.7.2

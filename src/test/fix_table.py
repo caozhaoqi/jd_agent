@@ -17,7 +17,7 @@ for col in columns:
     print(col)
 
 # 检查是否有email字段
-has_email = any(col[1] == 'email' for col in columns)
+has_email = any(col[1] == "email" for col in columns)
 
 if not has_email:
     print("\nemail字段缺失，正在添加...")

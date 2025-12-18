@@ -5,9 +5,12 @@ from pydantic import BaseModel, Field
 from app.core.llm_factory import get_llm
 from loguru import logger
 
+
 # 定义输出结构 (复用之前的 UserFact 逻辑)
 class UserFact(BaseModel):
-    category: str = Field(description="类别: tech_stack(技术栈)/experience(经验)/education(学历)/project(项目)")
+    category: str = Field(
+        description="类别: tech_stack(技术栈)/experience(经验)/education(学历)/project(项目)"
+    )
     content: str = Field(description="事实内容")
 
 
@@ -45,10 +48,12 @@ async def extract_resume_features(resume_text: str) -> List[UserFact]:
 
     try:
         # 截断简历过长内容，防止 token 溢出 (一般简历不会太长，取前 3000 字符足够)
-        result = await chain.ainvoke({
-            "resume_text": resume_text[:3000],
-            "format_instructions": parser.get_format_instructions()
-        })
+        result = await chain.ainvoke(
+            {
+                "resume_text": resume_text[:3000],
+                "format_instructions": parser.get_format_instructions(),
+            }
+        )
         return result.facts
     except Exception as e:
         logger.debug(f"❌ Resume extraction failed: {e}")

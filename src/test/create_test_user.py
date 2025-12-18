@@ -17,7 +17,9 @@ from sqlmodel import select
 
 with Session(engine) as session:
     # 检查用户是否已存在
-    existing_user = session.exec(select(User).where(User.username == "test_user")).first()
+    existing_user = session.exec(
+        select(User).where(User.username == "test_user")
+    ).first()
     if existing_user:
         print("测试用户已存在")
         user = existing_user
@@ -27,7 +29,7 @@ with Session(engine) as session:
         user = User(
             username="test_user",
             email="test@example.com",
-            hashed_password=hashed_password
+            hashed_password=hashed_password,
         )
         session.add(user)
         session.commit()

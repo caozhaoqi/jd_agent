@@ -15,17 +15,17 @@ def clean_markdown(text):
     清洗 Markdown 标记，只保留纯文本，方便 AI 检索
     """
     # 去除代码块 ```...```
-    text = re.sub(r'```[\s\S]*?```', '', text)
+    text = re.sub(r"```[\s\S]*?```", "", text)
     # 去除图片 ![...](...)
-    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
     # 去除链接 [ ... ](...)，只保留文本
-    text = re.sub(r'\[([^\]]+)\]\(.*?\)', r'\1', text)
+    text = re.sub(r"\[([^\]]+)\]\(.*?\)", r"\1", text)
     # 去除标题符号 #
-    text = re.sub(r'#+\s', '', text)
+    text = re.sub(r"#+\s", "", text)
     # 去除加粗/斜体 * 或 _
-    text = re.sub(r'[*_]{1,2}(.*?)[*_]{1,2}', r'\1', text)
+    text = re.sub(r"[*_]{1,2}(.*?)[*_]{1,2}", r"\1", text)
     # 去除多余换行
-    text = re.sub(r'\n+', '\n', text).strip()
+    text = re.sub(r"\n+", "\n", text).strip()
     return text
 
 
@@ -56,8 +56,10 @@ def generate_index():
                     categories = post.metadata.get("categories", [])
 
                     # 确保 tags/categories 是列表
-                    if isinstance(tags, str): tags = [tags]
-                    if isinstance(categories, str): categories = [categories]
+                    if isinstance(tags, str):
+                        tags = [tags]
+                    if isinstance(categories, str):
+                        categories = [categories]
 
                     # 清洗正文
                     content = clean_markdown(post.content)
@@ -74,7 +76,7 @@ def generate_index():
                         "tags": tags,
                         "categories": categories,
                         "content": content,
-                        "url": f"/posts/{title}/"  # 假设的 URL 结构
+                        "url": f"/posts/{title}/",  # 假设的 URL 结构
                     }
 
                     posts.append(post_data)

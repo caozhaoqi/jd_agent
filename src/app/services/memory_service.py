@@ -25,9 +25,7 @@ async def update_long_term_memory(db: Session, user_id: int, chat_history_str: s
 
         if not existing:
             new_profile = UserProfile(
-                user_id=user_id,
-                category=fact.category,
-                content=fact.content
+                user_id=user_id, category=fact.category, content=fact.content
             )
             db.add(new_profile)
 
@@ -39,9 +37,7 @@ def get_user_profile_str(db: Session, user_id: int) -> str:
     """
     【读】获取格式化的用户画像字符串，用于注入 Prompt
     """
-    profiles = db.exec(
-        select(UserProfile).where(UserProfile.user_id == user_id)
-    ).all()
+    profiles = db.exec(select(UserProfile).where(UserProfile.user_id == user_id)).all()
 
     if not profiles:
         return "用户画像为空 (这是新用户)"

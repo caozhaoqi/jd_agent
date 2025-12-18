@@ -13,16 +13,19 @@ class QuestionList(BaseModel):
 
 
 async def critique_tech_questions_async(
-        original_questions: List[InterviewQuestion],
-        level: str
+    original_questions: List[InterviewQuestion], level: str
 ) -> List[InterviewQuestion]:
     """
     反思环节：检查生成的题目是否符合职级要求，如果不符合则修改。
     """
-    logger.info(f"🤔 [Reflection] Critiquing {len(original_questions)} questions for level: {level}...")
+    logger.info(
+        f"🤔 [Reflection] Critiquing {len(original_questions)} questions for level: {level}..."
+    )
 
     # 1. 准备数据：把对象转成文本喂给 LLM
-    questions_text = "\n".join([f"Q: {q.question}\nA: {q.reference_answer}" for q in original_questions])
+    questions_text = "\n".join(
+        [f"Q: {q.question}\nA: {q.reference_answer}" for q in original_questions]
+    )
 
     # 2. 设置 LLM (建议用 Smart 模型，如 GPT-4/DeepSeek-V3，温度稍低)
     llm = get_llm(temperature=0.3)
@@ -57,15 +60,19 @@ async def critique_tech_questions_async(
 
     try:
         # 4. 执行反思
-        result = await chain.ainvoke({
-            "level": level,
-            "questions_text": questions_text,
-            "format_instructions": parser.get_format_instructions()
-        })
+        result = await chain.ainvoke(
+            {
+                "level": level,
+                "questions_text": questions_text,
+                "format_instructions": parser.get_format_instructions(),
+            }
+        )
         logger.success("✨ [Reflection] Questions refined successfully.")
         return result.questions
 
     except Exception as e:
-        logger.warning(f"⚠️ [Reflection] Critique failed, returning original questions. Error: {e}")
+        logger.warning(
+            f"⚠️ [Reflection] Critique failed, returning original questions. Error: {e}"
+        )
         # 如果反思步骤挂了（比如 Token 超限），为了系统稳定性，降级返回原题
         return original_questions

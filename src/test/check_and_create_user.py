@@ -8,7 +8,7 @@ import sys
 import os
 
 # 使用正确的数据库文件路径
-db_path = os.path.join(os.getcwd(), 'database.db')
+db_path = os.path.join(os.getcwd(), "database.db")
 print(f"数据库文件路径: {db_path}")
 
 # 连接到数据库
@@ -34,16 +34,17 @@ if existing:
 else:
     # 生成密码哈希 (简单版本用于测试)
     import bcrypt
+
     password = "test_password"
-    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    hashed_str = hashed.decode('utf-8')
-    
+    hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+    hashed_str = hashed.decode("utf-8")
+
     # 创建用户
     cursor.execute(
         "INSERT INTO user (username, email, hashed_password) VALUES (?, ?, ?)",
-        ('test_user', 'test@example.com', hashed_str)
+        ("test_user", "test@example.com", hashed_str),
     )
-    
+
     # 检查插入结果
     cursor.execute("SELECT * FROM user WHERE username = 'test_user'")
     new_user = cursor.fetchone()
@@ -55,12 +56,15 @@ else:
 # 3. 生成JWT令牌
 print("\n3. 生成JWT令牌:")
 from app.core.db_auth import create_access_token
+
 token = create_access_token({"sub": "test_user"})
 print(f"  JWT令牌: {token}")
 
 # 4. 测试认证查询
 print("\n4. 测试认证查询:")
-cursor.execute("SELECT id, username, email, hashed_password FROM user WHERE username = 'test_user'")
+cursor.execute(
+    "SELECT id, username, email, hashed_password FROM user WHERE username = 'test_user'"
+)
 user = cursor.fetchone()
 if user:
     print(f"  查询成功: {user}")

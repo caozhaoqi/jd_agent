@@ -8,7 +8,11 @@ import pyttsx3
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
 from fastapi import APIRouter, UploadFile, File
-from app.core.error_handler import raise_bad_request, raise_internal_error, raise_not_found
+from app.core.error_handler import (
+    raise_bad_request,
+    raise_internal_error,
+    raise_not_found,
+)
 from fastapi.responses import Response
 from loguru import logger
 from app.core.config import settings
@@ -38,18 +42,18 @@ async def transcribe_audio(file: UploadFile = File(...)):
     # 确保使用的是支持 Audio 的 API Key (如 SiliconFlow)
     client = OpenAI(
         api_key=settings.AUDIO_API_KEY or settings.OPENAI_API_KEY,
-        base_url=settings.AUDIO_API_BASE or settings.OPENAI_API_BASE
+        base_url=settings.AUDIO_API_BASE or settings.OPENAI_API_BASE,
     )
 
     try:
         # 2. 读取文件二进制内容
         file_content = await file.read()
         filename = file.filename or "media.wav"
-        
+
         # 3. 检测是否为视频文件
-        video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm']
+        video_extensions = [".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".webm"]
         is_video = any(filename.lower().endswith(ext) for ext in video_extensions)
-        
+
         # 4. 如果是视频文件，先提取音频
         if is_video:
             file_content = extract_audio_from_video_bytes(file_content, filename)
@@ -63,7 +67,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
         transcript = client.audio.transcriptions.create(
             model=settings.ASR_MODEL,  # 确保 .env 是 FunAudioLLM/SenseVoiceSmall
             file=file_tuple,  # 传入构造好的元组
-            temperature=0.0
+            temperature=0.0,
         )
         return {"text": transcript.text}
 
@@ -109,9 +113,7 @@ async def text_to_speech(request: TTSRequest):
 
             # 使用 macOS 原生 say 命令
             process = subprocess.run(
-                ["say", "-o", output_path, text],
-                capture_output=True,
-                text=True
+                ["say", "-o", output_path, text], capture_output=True, text=True
             )
             if process.returncode != 0:
                 raise Exception(f"Mac TTS failed: {process.stderr}")
@@ -125,12 +127,12 @@ async def text_to_speech(request: TTSRequest):
 
             # 使用 pyttsx3 (SAPI5 / eSpeak)
             # 注意：pyttsx3 是同步阻塞的，使用 asyncio.to_thread 避免阻塞主线程
-            
+
             def generate_audio_sync():
                 # 同步代码块，将在单独的线程中运行
                 engine.save_to_file(text, output_path)
                 engine.runAndWait()
-            
+
             # 在单独的线程中运行阻塞的pyttsx3调用
             await asyncio.to_thread(generate_audio_sync)
 
@@ -143,26 +145,26 @@ async def text_to_speech(request: TTSRequest):
         try:
             # 将生成的音频转换为MP3格式
             audio_segment = AudioSegment.from_file(output_path)
-            
+
             # 创建临时MP3文件
             mp3_output_path = os.path.join(temp_dir, f"tts_{unique_id}.mp3")
-            
+
             # 导出为MP3格式，设置比特率为128k
             audio_segment.export(mp3_output_path, format="mp3", bitrate="128k")
-            
+
             # 读取MP3文件数据
             with open(mp3_output_path, "rb") as f:
                 audio_data = f.read()
-            
+
             # 更新MIME类型为MP3
             mime_type = "audio/mp3"
-            
+
             # 删除临时文件
             if os.path.exists(output_path):
                 os.remove(output_path)
             if os.path.exists(mp3_output_path):
                 os.remove(mp3_output_path)
-            
+
         except CouldntDecodeError:
             # 如果转码失败，回退到原始格式
             logger.warning("音频转码失败，回退到原始格式")
@@ -183,6 +185,6 @@ async def text_to_speech(request: TTSRequest):
     except Exception as e:
         logger.debug(f"❌ [TTS Error] OS: {system_os} | Error: {e}")
         # 尝试清理残余文件
-        if 'output_path' in locals() and os.path.exists(output_path):
+        if "output_path" in locals() and os.path.exists(output_path):
             os.remove(output_path)
         raise_internal_error(message="TTS生成失败", exc=e)

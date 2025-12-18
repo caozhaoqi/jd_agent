@@ -3,13 +3,33 @@ from langchain_core.output_parsers import StrOutputParser
 from app.core.llm_factory import get_llm
 
 
-def get_interviewer_chain():
+def get_interviewer_chain(interview_type: str = "comprehensive"):
     """面试官 Agent：负责提问"""
     llm = get_llm(temperature=0.7)  # 面试官可以灵活一点
 
+    # 根据面试类型选择不同的角色和问题类型
+    interviewer_roles = {
+        "tech": "技术面试官",
+        "hr": "HR面试官",
+        "comprehensive": "综合面试官",
+        "behavioral": "行为面试官",
+        "management": "管理面试官",
+    }
+
+    question_types = {
+        "tech": "技术问题",
+        "hr": "HR问题",
+        "comprehensive": "面试问题",
+        "behavioral": "行为问题",
+        "management": "管理问题",
+    }
+
+    role = interviewer_roles.get(interview_type, "综合面试官")
+    q_type = question_types.get(interview_type, "面试问题")
+
     prompt = ChatPromptTemplate.from_template(
         """
-        你是一位严厉但专业的技术面试官。
+        你是一位严厉但专业的{role}。
 
         【岗位 JD】：
         {jd_text}
@@ -17,10 +37,10 @@ def get_interviewer_chain():
         【当前面试进展】：
         {history}
 
-        请根据 JD 和刚才的对话，向候选人提出**下一个**技术问题。
+        请根据 JD 和刚才的对话，向候选人提出**下一个**{q_type}。
         要求：
         1. 问题要简短有力，不要废话。
-        2. 如果候选人上一题回答得不好，可以追问；如果回答得好，进入下一个技术点。
+        2. 如果候选人上一题回答得不好，可以追问；如果回答得好，进入下一个相关要点。
         3. 只需要输出问题本身，不要输出 "好的"、"下一题" 等前缀。
         """
     )

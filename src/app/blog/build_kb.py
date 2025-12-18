@@ -3,7 +3,7 @@ import sys
 
 # 🚀 【核心修复】设置 HuggingFace 国内镜像 (必须放在最前面)
 # 这会让下载速度飞起，解决卡住的问题
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 import json
 import shutil
@@ -23,6 +23,7 @@ load_dotenv()
 DATA_DIR = "data"
 DB_DIR = "chroma_db"
 
+
 def build_knowledge_base():
     if os.path.exists(DB_DIR):
         shutil.rmtree(DB_DIR)
@@ -35,11 +36,13 @@ def build_knowledge_base():
 
     docs = []
     for post in blog_posts:
-        text_content = f"文章标题: {post['title']}\n标签: {post['tags']}\n内容:\n{post['content']}"
+        text_content = (
+            f"文章标题: {post['title']}\n标签: {post['tags']}\n内容:\n{post['content']}"
+        )
         metadata = {
-            "source": post['source'],
-            "title": post['title'],
-            "date": post['date']
+            "source": post["source"],
+            "title": post["title"],
+            "date": post["date"],
         }
         docs.append(Document(page_content=text_content, metadata=metadata))
 
@@ -55,17 +58,15 @@ def build_knowledge_base():
 
     # 强制指定 device='cpu' (Mac 上有时自动检测 mps 会卡住，先用 cpu 跑通最稳)
     embedding_model = HuggingFaceEmbeddings(
-        model_name="shibing624/text2vec-base-chinese",
-        model_kwargs={'device': 'cpu'}
+        model_name="shibing624/text2vec-base-chinese", model_kwargs={"device": "cpu"}
     )
 
     logger.debug("🚀 正在写入向量数据库 (Chroma)...")
     Chroma.from_documents(
-        documents=splits,
-        embedding=embedding_model,
-        persist_directory=DB_DIR
+        documents=splits, embedding=embedding_model, persist_directory=DB_DIR
     )
     logger.success("✅ 知识库构建完成！")
+
 
 if __name__ == "__main__":
     build_knowledge_base()

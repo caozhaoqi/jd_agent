@@ -35,6 +35,7 @@ def session_fixture():
 @pytest.fixture(name="client")
 def client_fixture(session: Session):
     """创建一个测试客户端，替换依赖项中的数据库会话"""
+
     def override_get_session():
         return session
 
@@ -70,7 +71,7 @@ def test_token_fixture(test_user: User, client: TestClient):
     """获取测试用户的访问令牌"""
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "test_user", "password": "test_password"}
+        json={"username": "test_user", "password": "test_password"},
     )
     data = response.json()
     return data["data"]["access_token"]

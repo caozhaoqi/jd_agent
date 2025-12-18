@@ -8,15 +8,21 @@ from loguru import logger
 
 class MatchItem(BaseModel):
     """单个匹配项"""
-    category: str = Field(description="匹配类别: tech_stack(技术栈)/experience(经验)/education(学历)/skills(技能)")
+
+    category: str = Field(
+        description="匹配类别: tech_stack(技术栈)/experience(经验)/education(学历)/skills(技能)"
+    )
     resume_content: str = Field(description="简历中的相关内容")
     jd_content: str = Field(description="JD中的相关要求")
     match_degree: int = Field(description="匹配度 0-100")
-    match_type: str = Field(description="匹配类型: exact(完全匹配)/partial(部分匹配)/none(不匹配)")
+    match_type: str = Field(
+        description="匹配类型: exact(完全匹配)/partial(部分匹配)/none(不匹配)"
+    )
 
 
 class MatchAnalysis(BaseModel):
     """匹配分析结果"""
+
     overall_score: int = Field(description="总体匹配度 0-100")
     strengths: List[str] = Field(description="简历的优势")
     weaknesses: List[str] = Field(description="简历的不足")
@@ -27,11 +33,11 @@ class MatchAnalysis(BaseModel):
 async def match_resume_with_jd(resume_text: str, jd_text: str) -> Dict[str, Any]:
     """
     利用LLM分析简历与JD的匹配度
-    
+
     Args:
         resume_text: 简历文本
         jd_text: JD文本
-    
+
     Returns:
         包含匹配度分析的字典
     """
@@ -72,12 +78,14 @@ async def match_resume_with_jd(resume_text: str, jd_text: str) -> Dict[str, Any]
 
     try:
         # 截断过长内容，防止token溢出
-        result = await chain.ainvoke({
-            "resume_text": resume_text[:3000],
-            "jd_text": jd_text[:3000],
-            "format_instructions": parser.get_format_instructions()
-        })
-        
+        result = await chain.ainvoke(
+            {
+                "resume_text": resume_text[:3000],
+                "jd_text": jd_text[:3000],
+                "format_instructions": parser.get_format_instructions(),
+            }
+        )
+
         # 转换为字典格式返回
         return result.model_dump()
     except Exception as e:
@@ -88,5 +96,5 @@ async def match_resume_with_jd(resume_text: str, jd_text: str) -> Dict[str, Any]
             "strengths": [],
             "weaknesses": [],
             "suggestions": [],
-            "detailed_matches": []
+            "detailed_matches": [],
         }

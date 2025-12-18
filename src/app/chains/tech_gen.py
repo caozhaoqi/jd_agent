@@ -30,11 +30,11 @@ def clean_json_output(text: str) -> str:
 
 # 异步生成技术题
 async def generate_tech_async(
-        tech_stack: List[str],
-        level: str,
-        kb_context: str = "",
-        chat_history: list = [],
-        user_profile: str = ""
+    tech_stack: List[str],
+    level: str,
+    kb_context: str = "",
+    chat_history: list = [],
+    user_profile: str = "",
 ) -> List[InterviewQuestion]:
     llm = get_llm(temperature=0.7)
     parser = PydanticOutputParser(pydantic_object=QuestionList)
@@ -71,20 +71,18 @@ async def generate_tech_async(
     # 2. -> RunnableLambda(clean) (去除 ```json)
     # 3. -> parser (Pydantic 解析)
     chain = (
-            prompt
-            | llm
-            | StrOutputParser()
-            | RunnableLambda(clean_json_output)
-            | parser
+        prompt | llm | StrOutputParser() | RunnableLambda(clean_json_output) | parser
     )
 
     try:
-        result = await chain.ainvoke({
-            "tech_stack": ", ".join(tech_stack),
-            "level": level,
-            "context_str": context_str,
-            "format_instructions": parser.get_format_instructions()
-        })
+        result = await chain.ainvoke(
+            {
+                "tech_stack": ", ".join(tech_stack),
+                "level": level,
+                "context_str": context_str,
+                "format_instructions": parser.get_format_instructions(),
+            }
+        )
         return result.questions
     except Exception as e:
         print(f"❌ Tech Gen Parse Error: {e}")

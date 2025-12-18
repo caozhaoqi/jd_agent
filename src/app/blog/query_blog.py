@@ -9,7 +9,9 @@ from loguru import logger
 # 获取当前脚本的绝对路径
 current_path = os.path.abspath(__file__)
 # 向回退 4 层找到项目根目录 (根据你的目录结构: src/app/blog/query_blog.py)
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_path))))
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(current_path)))
+)
 env_path = os.path.join(project_root, ".env")
 
 # 1. 加载环境变量
@@ -42,16 +44,14 @@ def query_blog_knowledge(question: str):
     logger.debug("⏳ 正在加载 BGE 模型...")
     embedding_model = HuggingFaceEmbeddings(
         model_name="BAAI/bge-small-zh-v1.5",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': True}
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
     )
 
     try:
         # 加载向量库
         vector_store = FAISS.load_local(
-            DB_LOAD_PATH,
-            embedding_model,
-            allow_dangerous_deserialization=True
+            DB_LOAD_PATH, embedding_model, allow_dangerous_deserialization=True
         )
     except Exception as e:
         return f"❌ 找不到知识库目录 '{DB_LOAD_PATH}'。\n请先确保你运行了 build_blog_kb.py 并且生成了索引文件。\n错误详情: {e}"
@@ -64,7 +64,12 @@ def query_blog_knowledge(question: str):
         return "博客里好像没有相关内容。"
 
     # 拼接上下文
-    context = "\n\n".join([f"---片段来源: {d.metadata.get('source', '未知')}---\n{d.page_content}" for d in docs])
+    context = "\n\n".join(
+        [
+            f"---片段来源: {d.metadata.get('source', '未知')}---\n{d.page_content}"
+            for d in docs
+        ]
+    )
 
     # 3. 生成 (Generate)
     llm = get_llm(temperature=0.3)
@@ -95,7 +100,7 @@ if __name__ == "__main__":
     while True:
         logger.debug("\n" + "=" * 30)
         q = input("请输入你想查询博客的问题 (输入 q 退出): ")
-        if q.lower() in ['q', 'quit', 'exit']:
+        if q.lower() in ["q", "quit", "exit"]:
             break
 
         answer = query_blog_knowledge(q)

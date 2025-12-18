@@ -42,32 +42,36 @@ class BlogKnowledgeBase:
 
             # 3. 初始化 Embedding 模型
             # 设置 HF 镜像，防止国内网络下载模型超时
-            os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+            os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
             self.embeddings = HuggingFaceEmbeddings(
                 model_name="BAAI/bge-small-zh-v1.5",
                 # 关键修改：将 device 设置为检测到的硬件，而不是写死 'cpu'
-                model_kwargs={'device': device},
-                encode_kwargs={'normalize_embeddings': True}
+                model_kwargs={"device": device},
+                encode_kwargs={"normalize_embeddings": True},
             )
 
             # 4. 加载 FAISS 向量库
             if os.path.exists(DB_PATH):
                 self.vector_store = FAISS.load_local(
-                    DB_PATH,
-                    self.embeddings,
-                    allow_dangerous_deserialization=True
+                    DB_PATH, self.embeddings, allow_dangerous_deserialization=True
                 )
-                logger.success(f"✅ [KB] Vector Store loaded successfully from: {DB_PATH}")
+                logger.success(
+                    f"✅ [KB] Vector Store loaded successfully from: {DB_PATH}"
+                )
             else:
-                logger.warning(f"⚠️ [KB] Index not found at {DB_PATH}. RAG functionality disabled.")
+                logger.warning(
+                    f"⚠️ [KB] Index not found at {DB_PATH}. RAG functionality disabled."
+                )
                 self.vector_store = None
 
         except Exception as e:
             logger.error(f"❌ [KB] Init failed: {e}")
             self.vector_store = None
 
-    async def search(self, query: str, top_k: int = 3) -> dict[str, Union[str, list[Any]]]:
+    async def search(
+        self, query: str, top_k: int = 3
+    ) -> dict[str, Union[str, list[Any]]]:
         """
         检索相关文档
         返回格式: {"context": "拼接好的文档内容...", "sources": ["文章A.md", "文章B.md"]}
@@ -95,10 +99,7 @@ class BlogKnowledgeBase:
                 # 格式化文档内容
                 context_parts.append(f"---[引用自: {source}]---\n{doc.page_content}")
 
-            return {
-                "context": "\n\n".join(context_parts),
-                "sources": list(sources)
-            }
+            return {"context": "\n\n".join(context_parts), "sources": list(sources)}
         except Exception as e:
             logger.error(f"❌ [KB] Search failed: {e}")
             return {"context": "", "sources": []}

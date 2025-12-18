@@ -12,18 +12,17 @@ async def chat_with_blog(query: str):
     search_results = rag_engine.search(query, top_k=3)
 
     if not search_results:
-        return {
-            "answer": "抱歉，我在知识库中没有找到相关内容。",
-            "sources": []
-        }
+        return {"answer": "抱歉，我在知识库中没有找到相关内容。", "sources": []}
 
     # 2. 拼接上下文 (Context)
     context_str = ""
     sources = set()
 
     for i, item in enumerate(search_results):
-        context_str += f"--- 片段 {i + 1} (来源: {item['source']}) ---\n{item['content']}\n\n"
-        sources.add(item['source'])
+        context_str += (
+            f"--- 片段 {i + 1} (来源: {item['source']}) ---\n{item['content']}\n\n"
+        )
+        sources.add(item["source"])
 
     # 3. 构建 Prompt
     llm = get_llm(temperature=0.3)  # 问答模式温度低一点，防止胡编
@@ -45,12 +44,6 @@ async def chat_with_blog(query: str):
     chain = prompt | llm | StrOutputParser()
 
     # 4. 生成回答 (Generation)
-    answer = await chain.ainvoke({
-        "context": context_str,
-        "question": query
-    })
+    answer = await chain.ainvoke({"context": context_str, "question": query})
 
-    return {
-        "answer": answer,
-        "sources": list(sources)  # 返回去重后的文章列表
-    }
+    return {"answer": answer, "sources": list(sources)}  # 返回去重后的文章列表

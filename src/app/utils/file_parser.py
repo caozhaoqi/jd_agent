@@ -35,7 +35,9 @@ async def parse_resume_file(file: UploadFile) -> str:
             content_text = file_bytes.decode("utf-8")
 
         else:
-            raise HTTPException(status_code=400, detail="不支持的文件格式，仅支持 PDF, DOCX, TXT")
+            raise HTTPException(
+                status_code=400, detail="不支持的文件格式，仅支持 PDF, DOCX, TXT"
+            )
 
         if len(content_text.strip()) < 10:
             raise HTTPException(status_code=400, detail="文件内容为空或无法识别")

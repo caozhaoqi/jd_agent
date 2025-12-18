@@ -30,7 +30,9 @@ def get_recent_chat_history(db: Session, user_id: int, limit: int = 5) -> list[s
     for msg in messages[-limit:]:  # 只取最后 N 条
         role_label = "User" if msg.role == "user" else "Assistant"
         # 简单清洗内容，防止过长
-        content_preview = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+        content_preview = (
+            msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+        )
         history.append(f"{role_label}: {content_preview}")
 
     return history

@@ -26,8 +26,8 @@ if os.path.exists(DB_DIR):
         search_type="similarity_score_threshold",  # 启用阈值模式
         search_kwargs={
             "k": 5,  # 先捞 5 个
-            "score_threshold": 0.4  # 设定门槛 (注意：Chroma默认是距离，LangChain封装后通常转为相似度，需调试。0.4-0.6 是常用区间)
-        }
+            "score_threshold": 0.4,  # 设定门槛 (注意：Chroma默认是距离，LangChain封装后通常转为相似度，需调试。0.4-0.6 是常用区间)
+        },
     )
     # 1. 定义基础检索器 (先多捞一点，比如 k=10)
     base_retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
@@ -35,13 +35,12 @@ if os.path.exists(DB_DIR):
     # 2. 定义重排序器 (Reranker)
     compressor = FlashrankRerank(
         model="ms-marco-MiniLM-L-12-v2",  # 轻量级模型，自动下载
-        top_n=3  # 最终只留前 3 名
+        top_n=3,  # 最终只留前 3 名
     )
 
     # 3. 组合成新的检索器
     compression_retriever = ContextualCompressionRetriever(
-        base_compressor=compressor,
-        base_retriever=base_retriever
+        base_compressor=compressor, base_retriever=base_retriever
     )
 
 else:
@@ -94,26 +93,29 @@ def get_rag_chain(streaming: bool = False):
         openai_api_key=settings.OPENAI_API_KEY,
         openai_api_base=settings.OPENAI_API_BASE,
         temperature=0.1,  # RAG 任务温度要低，防幻觉
-        streaming=streaming
+        streaming=streaming,
     )
 
     # 使用 RunnableParallel 并行获取检索结果
     rag_chain_from_docs = (
-            RunnableParallel(
-                {
-                    "context": lambda x: format_docs_with_source(x["docs"]),
-                    "question": lambda x: x["question"]
-                }
-            )
-            | prompt
-            | llm
-            | StrOutputParser()
+        RunnableParallel(
+            {
+                "context": lambda x: format_docs_with_source(x["docs"]),
+                "question": lambda x: x["question"],
+            }
+        )
+        | prompt
+        | llm
+        | StrOutputParser()
     )
 
     # 最终链：先检索，再把 docs 传给 rag_chain_from_docs，同时保留 docs 用于提取来源
     chain = (
         RunnableParallel(
-            {"docs": compression_retriever, "question": RunnablePassthrough()}  # 使用 compression_retriever
+            {
+                "docs": compression_retriever,
+                "question": RunnablePassthrough(),
+            }  # 使用 compression_retriever
         )
         .assign(answer=rag_chain_from_docs)
         .pick(["answer", "docs"])
@@ -164,12 +166,12 @@ async def ask_knowledge_base(question: str):
 
     for i, doc in enumerate(source_docs):
         # 获取文件名
-        source_name = doc.metadata.get('source', '未知来源')
+        source_name = doc.metadata.get("source", "未知来源")
         # 获取相关性分数 (如果有的话，Chroma 默认 retriever 不直接返回分数，除非用 similarity_search_with_score)
 
         logger.debug(f"--- 片段 {i + 1} (来源: {source_name}) ---")
         # 打印内容预览，去除换行符以便查看
-        preview_content = doc.page_content[:150].replace('\n', ' ')
+        preview_content = doc.page_content[:150].replace("\n", " ")
         logger.debug(f"内容: {preview_content}...")
 
     logger.debug("--------------------------------------------------\n")
@@ -181,5 +183,5 @@ async def ask_knowledge_base(question: str):
         "answer": answer,
         "sources": sources,
         "original_query": question,  # (可选) 返回原始问题
-        "rewritten_query": better_question  # (可选) 返回改写后的问题供前端展示
+        "rewritten_query": better_question,  # (可选) 返回改写后的问题供前端展示
     }

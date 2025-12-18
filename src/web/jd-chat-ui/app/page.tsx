@@ -191,7 +191,7 @@ export default function Home() {
       {/* 右侧 Dashboard */}
       <div className={clsx(
           "bg-[#fcfdfd] border-l border-gray-200 transition-all duration-300 ease-in-out flex flex-col",
-          showDashboard ? "w-[300px] translate-x-0" : "w-0 translate-x-full overflow-hidden border-none"
+          showDashboard ? "w-[300px] md:w-[350px] translate-x-0" : "w-0 translate-x-full overflow-hidden border-none"
       )}>
           <div className="p-4 border-b border-gray-100 font-bold text-sm text-gray-700">🧠 Agent 状态监控</div>
           <BrainDashboard data={dashboardData} />

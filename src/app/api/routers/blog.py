@@ -7,12 +7,15 @@ from app.core.models import User
 
 router = APIRouter()
 
+
 class BlogQueryRequest(BaseModel):
     question: str
+
 
 class BlogQueryResponse(BaseModel):
     answer: str
     sources: List[str]
+
 
 @router.post("/chat", response_model=BlogQueryResponse)
 async def chat_blog(request: BlogQueryRequest, user: User = Depends(get_current_user)):

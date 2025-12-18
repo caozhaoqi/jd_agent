@@ -14,6 +14,7 @@ class UserProfile(SQLModel, table=True):
     """
     长期记忆表：存储用户的关键画像信息
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     category: str  # 类别，如: "tech_stack", "experience", "preference"
@@ -52,7 +53,8 @@ class ChatMessage(SQLModel, table=True):
 
 class InterviewRecord(Base):
     """面试记录表"""
-    __tablename__ = 'interview_records'
+
+    __tablename__ = "interview_records"
 
     id = Column(Integer, primary_key=True)
     company_name = Column(String(100))
@@ -103,10 +105,7 @@ class TTSRequest(BaseModel):
     text: str = Field(..., description="待转换的文本")
 
 
-
 # 定义请求模型
 class ResumeJDMatchRequest(BaseModel):
     resume_text: str
     jd_text: str
-
-

@@ -10,17 +10,23 @@ def create_jd_agent():
     # 告诉大模型：你有这两个工具可以用
     tools = [search_blog_tool, search_company_tool]
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "你是一个专业的招聘助手。你会根据用户的需求，自主决定是否需要查阅知识库或调查公司背景。"),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),  # AI 的思考过程会填在这里
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "你是一个专业的招聘助手。你会根据用户的需求，自主决定是否需要查阅知识库或调查公司背景。",
+            ),
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),  # AI 的思考过程会填在这里
+        ]
+    )
 
     # 创建 Agent
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
     return agent_executor
+
 
 # 使用
 # agent = create_jd_agent()

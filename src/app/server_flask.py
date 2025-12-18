@@ -12,13 +12,14 @@ app = Flask(__name__)
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://user:pass@localhost/db'
 # db = SQLAlchemy(app)
 
-@app.route('/api/v1/flask/analyze', methods=['POST'])
+
+@app.route("/api/v1/flask/analyze", methods=["POST"])
 def analyze_jd_flask():
     """
     JD要求的 Flask 路由设计与请求处理
     """
     data = request.json
-    jd_text = data.get('jd_text', '')
+    jd_text = data.get("jd_text", "")
 
     # 1. 演示 RAG：先从向量库找有没有类似的历史经验
     related_info = rag_engine.search(query=jd_text, top_k=1)
@@ -37,9 +38,9 @@ def analyze_jd_flask():
         yield f"data: [Result] 分析完成，建议重点复习 BGE 和 Flask。\n\n"
         yield "data: [DONE]\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(generate(), mimetype="text/event-stream")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # JD要求: 熟悉 Gunicorn (生产环境部署命令: gunicorn -w 4 server_flask:app)
     app.run(debug=True, port=5000)

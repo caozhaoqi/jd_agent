@@ -12,6 +12,7 @@ ENV_PATH = os.path.join(project_root, ".env")
 
 logger.debug(f"🔧 [Config] Loading .env from: {ENV_PATH}")
 
+
 class Settings(BaseSettings):
     """
     系统配置类
@@ -68,18 +69,39 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = None
     REDIS_URL: Optional[str] = None
 
+    # Redis 性能优化配置
+    REDIS_SOCKET_CONNECT_TIMEOUT: int = 5  # 连接超时时间
+    REDIS_SOCKET_TIMEOUT: int = 30  # 读写超时时间
+    REDIS_MAX_CONNECTIONS: int = 50  # 最大连接数
+    REDIS_RETRY_ON_TIMEOUT: bool = True  # 超时后重试
+
+    # 缓存过期时间配置（秒）
+    CACHE_EXPIRATION_DEFAULT: int = 3600  # 默认缓存过期时间（1小时）
+    CACHE_EXPIRATION_SHORT: int = 300  # 短时间缓存（5分钟）
+    CACHE_EXPIRATION_LONG: int = 604800  # 长时间缓存（7天）
+    CACHE_EXPIRATION_LLM: int = 259200  # LLM结果缓存（3天）
+    CACHE_EXPIRATION_COMPANY_RESEARCH: int = 604800  # 公司研究缓存（7天）
+
     @property
     def effective_redis_url(self):
         if self.REDIS_URL:
             return self.REDIS_URL
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    # --- Confluence 配置 ---
+    CONFLUENCE_URL: Optional[str] = None  # Confluence服务器地址
+    CONFLUENCE_USERNAME: Optional[str] = None  # 用户名/邮箱
+    CONFLUENCE_PASSWORD: Optional[str] = None  # 密码/API令牌
+    CONFLUENCE_SPACE_KEYS: List[str] = []  # 要同步的空间key列表
+    CONFLUENCE_PAGE_SIZE: int = 50  # 每次请求的页面数量
+    CONFLUENCE_MAX_RETRIES: int = 3  # 请求重试次数
+
     # --- Pydantic 配置 ---
     model_config = SettingsConfigDict(
         env_file=ENV_PATH,  # 指定读取的文件名
         env_file_encoding="utf-8",  # 编码
         case_sensitive=True,  # 大小写敏感
-        extra="ignore"  # 忽略 .env 中多余的字段，不报错
+        extra="ignore",  # 忽略 .env 中多余的字段，不报错
     )
 
 
