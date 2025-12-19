@@ -23,8 +23,8 @@ export default function Home() {
   const router = useRouter();
 
   // --- 全局 UI 状态 ---
-  const [username, setUsername] = useState(() => localStorage.getItem("username") || "Guest");
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
+  const [username, setUsername] = useState("Guest");
+  const [token, setToken] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
 
   const [mode, setMode] = useState<ChatMode | 'rag'>("guide");
@@ -43,6 +43,13 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/chat/history/sessions`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
+      // 如果token无效，清除localStorage并重新登录
+      if (res.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
+        router.push("/login");
+        return [];
+      }
       if (res.ok) return await res.json();
     } catch (e) {
       console.error(e);
@@ -50,21 +57,30 @@ export default function Home() {
     return [];
   };
 
-  // --- 初始化加载 ---
+  // --- 初始化加载与认证 ---
   useEffect(() => {
-    const loadSessions = async () => {
-      if (!token) return;
-      const sessionsData = await fetchSessionsData(token);
-      setSessions(sessionsData);
-    };
+    // Load localStorage data after client-side hydration
+    const storedUsername = localStorage.getItem("username");
+    const storedToken = localStorage.getItem("token");
     
-    if (!token) {
-      router.push("/login");
-      return;
+    // Set initial state from localStorage
+    if (storedUsername) {
+      setUsername(storedUsername);
     }
     
-    loadSessions();
-  }, [router, token]);
+    if (storedToken) {
+      setToken(storedToken);
+      // Load sessions after token is set
+      const loadSessions = async () => {
+        const sessionsData = await fetchSessionsData(storedToken);
+        setSessions(sessionsData);
+      };
+      loadSessions();
+    } else {
+      // Redirect to login if no token found
+      router.push("/login");
+    }
+  }, [router]);
 
   // --- 核心业务逻辑 (委托给 Hook) ---
   const {
@@ -97,6 +113,11 @@ export default function Home() {
         };
         loadSessions();
       }
+  },
+  onLogout: () => {
+      localStorage.removeItem("token");
+      localStorage.removeItem("username");
+      router.push("/login");
   }
   });
 
@@ -107,13 +128,18 @@ export default function Home() {
       setMode('mock'); // 加载旧会话默认进入对话模式
 
       // 加载历史消息逻辑可以放在这里，或者封装进 Hook
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/chat/history/messages/${id}`, {
+      const res = await fetch(`${API_BASE}/chat/history/messages/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
           const msgs = await res.json();
           // 简单的格式处理，如果需要更复杂的可以复用 formatReportToMarkdown
           setMessages(msgs);
+      } else if (res.status === 401) {
+          // 如果token无效，清除localStorage并重新登录
+          localStorage.removeItem("token");
+          localStorage.removeItem("username");
+          router.push("/login");
       }
   };
 

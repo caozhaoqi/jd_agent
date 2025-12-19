@@ -9,7 +9,12 @@ interface AudioQueueStatus {
   error: string | null;
 }
 
-export function useAudioQueue() {
+interface UseAudioQueueProps {
+  token: string | null;
+  onLogout: () => void;
+}
+
+export function useAudioQueue({ token, onLogout }: UseAudioQueueProps) {
   const audioQueueRef = useRef<string[]>([]);
   const isPlayingRef = useRef(false);
   const isLoadingRef = useRef(false);
@@ -68,7 +73,6 @@ export function useAudioQueue() {
     updateQueueStatus();
 
     try {
-      const token = localStorage.getItem("token");
       if (!token) {
         throw new Error("缺少认证令牌");
       }
@@ -146,6 +150,11 @@ export function useAudioQueue() {
              updateQueueStatus();
         }
       } else {
+        // 处理401错误
+        if (res.status === 401) {
+          onLogout();
+          return;
+        }
         const errorText = await res.text();
         throw new Error(errorText || `TTS服务错误: ${res.status}`);
       }
@@ -161,7 +170,7 @@ export function useAudioQueue() {
       }));
       processAudioQueue();
     }
-  }, [updateQueueStatus]);
+  }, [updateQueueStatus, token]);
 
   const addToQueue = useCallback((text: string) => {
     if (!text.trim()) return;

@@ -82,7 +82,9 @@ def register(req: AuthRequest, session: Session = Depends(get_session)):
 @router.post("/login")
 def login(req: AuthRequest, session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.username == req.username)).first()
-    if not user or not verify_password(req.password, user.hashed_password):
+    # 登录时同样需要截断密码，与注册时保持一致
+    truncated_password = req.password[:72]
+    if not user or not verify_password(truncated_password, user.hashed_password):
         raise APIException(
             status_code=401, code=ErrorCode.UNAUTHORIZED, message="用户名或密码错误"
         )

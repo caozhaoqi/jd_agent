@@ -21,6 +21,7 @@ interface UseChatProps {
   isTTSEnabled: boolean;
   onDashboardUpdate: (key: string, value: string | string[] | { title: string; url: string; score: number }[]) => void;
   onSessionCreated: (id: number) => void;
+  onLogout: () => void;
 }
 
 interface ReportData {
@@ -44,12 +45,12 @@ interface RAGResponse {
   sources: string[];
 }
 
-export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboardUpdate, onSessionCreated }: UseChatProps) {
+export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboardUpdate, onSessionCreated, onLogout }: UseChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showStartInterviewBtn, setShowStartInterviewBtn] = useState(false);
 
-  const { addToQueue, stopAudio, unlockAudio } = useAudioQueue();
+  const { addToQueue, stopAudio, unlockAudio } = useAudioQueue({ token, onLogout });
   const isTTSRef = useRef(isTTSEnabled);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -100,11 +101,15 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
         } catch {
           errorMessage = errorText || errorMessage;
         }
+        // 如果是401错误，抛出特定的错误，方便上层处理
+        if (response.status === 401) {
+          throw new Error("401 Unauthorized");
+        }
         throw new Error(errorMessage);
       }
       return response;
     } catch (error) {
-      if (retries > 0) {
+      if (retries > 0 && !(error instanceof Error && error.message === "401 Unauthorized")) {
         await new Promise(resolve => setTimeout(resolve, API_CONFIG.RETRY_DELAY));
         return fetchWithRetry(url, options, retries - 1);
       }
@@ -334,16 +339,21 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
 
     } catch (e) {
         console.error(e);
+        const errorMessage = e instanceof Error ? e.message : "网络错误";
+        
+        // 处理401错误
+        if (errorMessage === "401 Unauthorized") {
+            onLogout();
+            return;
+        }
+        
         setMessages(prev => {
             const lastMsg = prev[prev.length - 1];
-            const errorMessage = e instanceof Error ? e.message : "网络错误";
             let friendlyErrorMessage = errorMessage;
             
             // 友好的错误信息转换
             if (friendlyErrorMessage.includes("timeout")) {
                 friendlyErrorMessage = "请求超时，请稍后重试或检查网络连接";
-            } else if (friendlyErrorMessage.includes("401")) {
-                friendlyErrorMessage = "登录已过期，请重新登录";
             } else if (friendlyErrorMessage.includes("500")) {
                 friendlyErrorMessage = "服务器暂时无法处理请求，请稍后重试";
             } else if (friendlyErrorMessage.includes("Connection reset")) {
