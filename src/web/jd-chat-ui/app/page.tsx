@@ -23,11 +23,11 @@ export default function Home() {
   const router = useRouter();
 
   // --- 全局 UI 状态 ---
-  const [username, setUsername] = useState("Guest");
-  const [token, setToken] = useState<string | null>(null);
+  const [username, setUsername] = useState(() => localStorage.getItem("username") || "Guest");
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
   const [sessions, setSessions] = useState<Session[]>([]);
 
-  const [mode, setMode] = useState<ChatMode | 'rag'>('guide');
+  const [mode, setMode] = useState<ChatMode | 'rag'>("guide");
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
 
   const [showDashboard, setShowDashboard] = useState(true);
@@ -37,26 +37,34 @@ export default function Home() {
     currentStep: "", userProfile: [], ragSources: []
   });
 
-  // --- 初始化加载 ---
-  useEffect(() => {
-    const t = localStorage.getItem("token");
-    const u = localStorage.getItem("username");
-    if (!t) { router.push("/login"); return; }
-    setToken(t);
-    setUsername(u || "User");
-    fetchSessions(t);
-  }, []);
-
-
-
-  const fetchSessions = async (authToken: string) => {
+  // --- 会话相关功能 ---
+  const fetchSessionsData = async (authToken: string): Promise<Session[]> => {
     try {
       const res = await fetch(`${API_BASE}/chat/history/sessions`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
-      if (res.ok) setSessions(await res.json());
-    } catch (e) { console.error(e); }
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
   };
+
+  // --- 初始化加载 ---
+  useEffect(() => {
+    const loadSessions = async () => {
+      if (!token) return;
+      const sessionsData = await fetchSessionsData(token);
+      setSessions(sessionsData);
+    };
+    
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    
+    loadSessions();
+  }, [router, token]);
 
   // --- 核心业务逻辑 (委托给 Hook) ---
   const {
@@ -73,17 +81,23 @@ export default function Home() {
     isTTSEnabled,
     onDashboardUpdate: (key, value) => {
         setDashboardData(prev => {
-            if (key === 'user_profile') return { ...prev, userProfile: value };
-            if (key === 'rag_sources') return { ...prev, ragSources: value };
-            if (key === 'current_step') return { ...prev, currentStep: value };
+            if (key === 'user_profile') return { ...prev, userProfile: value as string[] };
+            if (key === 'rag_sources') return { ...prev, ragSources: value as { title: string; url: string; score: number }[] };
+            if (key === 'current_step') return { ...prev, currentStep: value as string };
             return prev;
         });
     },
-    onSessionCreated: (id) => {
-        setCurrentSessionId(id);
-        setShowStartInterviewBtn(true);
-        if(token) fetchSessions(token); // 刷新侧边栏
-    }
+  onSessionCreated: (id) => {
+      setCurrentSessionId(id);
+      setShowStartInterviewBtn(true);
+      if(token) {
+        const loadSessions = async () => {
+          const sessionsData = await fetchSessionsData(token);
+          setSessions(sessionsData);
+        };
+        loadSessions();
+      }
+  }
   });
 
   // --- 界面交互处理 ---

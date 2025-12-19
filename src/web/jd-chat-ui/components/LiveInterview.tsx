@@ -47,7 +47,7 @@ export default function LiveInterview() {
 }
 
 function AgentStatus() {
-    const { state, audioTrack } = useVoiceAssistant();
+    const { state } = useVoiceAssistant();
     return (
         <div className="mt-4 text-sm text-gray-400">
             {state === 'listening' && <span className="text-green-400">🎤 正在听你说话... (可随时打断)</span>}

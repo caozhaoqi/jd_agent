@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { BrainCircuit, Loader2, CheckCircle2 } from "lucide-react";
 import clsx from "clsx";
 

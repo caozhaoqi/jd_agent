@@ -6,13 +6,42 @@ import { useAudioQueue } from "@/hooks/useAudioQueue";
 // 定义后端 API 基础路径，使用相对路径通过Next.js代理转发
 export const API_BASE = "/api/v1";
 
+// API 请求配置
+const API_CONFIG = {
+  TIMEOUT: 60000, // 60秒超时
+  MAX_RETRIES: 2, // 最大重试次数
+  RETRY_DELAY: 2000, // 重试延迟
+};
+
+// 接口定义
 interface UseChatProps {
   token: string | null;
   mode: ChatMode | 'rag';
   currentSessionId: number | null;
   isTTSEnabled: boolean;
-  onDashboardUpdate: (key: string, value: any) => void;
+  onDashboardUpdate: (key: string, value: string | string[] | { title: string; url: string; score: number }[]) => void;
   onSessionCreated: (id: number) => void;
+}
+
+interface ReportData {
+  meta: {
+    company_name: string;
+    tech_stack: string[];
+  };
+  tech_questions: Array<{
+    question: string;
+    reference_answer: string;
+  }>;
+  hr_questions?: Array<{
+    question: string;
+    reference_answer: string;
+  }>;
+  company_analysis?: string;
+}
+
+interface RAGResponse {
+  answer: string;
+  sources: string[];
 }
 
 export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboardUpdate, onSessionCreated }: UseChatProps) {
@@ -22,6 +51,7 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
 
   const { addToQueue, stopAudio, unlockAudio } = useAudioQueue();
   const isTTSRef = useRef(isTTSEnabled);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // 同步 TTS 开关引用
   useEffect(() => {
@@ -29,13 +59,66 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
     if (!isTTSEnabled) stopAudio();
   }, [isTTSEnabled, stopAudio]);
 
-  // --- 辅助函数：格式化 Markdown ---
-  const formatReportToMarkdown = (data: any) => {
-      const { meta, tech_questions, hr_questions, company_analysis } = data;
-      return `## 📊 ${meta.company_name || '岗位'} 分析\n\n**技术栈**: \`${meta.tech_stack.join('`, `')}\`\n\n${company_analysis ? `> 🏢 **公司**: ${company_analysis}\n\n` : ''}### 🛠️ 推荐技术题\n${tech_questions.map((q:any,i:number)=>`**Q${i+1}: ${q.question}**\n> ${q.reference_answer}`).join('\n\n')}`;
+  // 清理函数
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // 超时处理函数
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
+
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`请求超时 (${API_CONFIG.TIMEOUT}ms)`);
+      }
+      throw error;
+    }
   };
 
-  const formatRAGResponse = (data: { answer: string; sources: string[] }) => {
+  // 重试机制函数
+  const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = API_CONFIG.MAX_RETRIES): Promise<Response> => {
+    try {
+      const response = await fetchWithTimeout(url, options);
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `服务器错误: ${response.status}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+      return response;
+    } catch (error) {
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, API_CONFIG.RETRY_DELAY));
+        return fetchWithRetry(url, options, retries - 1);
+      }
+      throw error;
+    }
+  };
+
+  // --- 辅助函数：格式化 Markdown ---
+  const formatReportToMarkdown = (data: ReportData) => {
+      const { meta, tech_questions, company_analysis } = data;
+      return `## 📊 ${meta.company_name || '岗位'} 分析\n\n**技术栈**: \`${meta.tech_stack.join('`, `')}\`\n\n${company_analysis ? `> 🏢 **公司**: ${company_analysis}\n\n` : ''}### 🛠️ 推荐技术题\n${tech_questions.map((q,i)=>`**Q${i+1}: ${q.question}**\n> ${q.reference_answer}`).join('\n\n')}`;
+  };
+
+  const formatRAGResponse = (data: RAGResponse) => {
     const { answer, sources } = data;
     if (!sources || sources.length === 0) return answer;
     const sourceList = sources.map((s) => `- 📄 ${s}`).join("\n");
@@ -143,9 +226,25 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
                   }
               }
           }
-      } catch (err) { console.error("Stream failed:", err); } finally {
-          if (isTTSRef.current && bufferText.trim()) addToQueue(bufferText);
-      }
+      } catch (err) {
+          console.error("Stream failed:", err);
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1];
+            const errorMessage = err instanceof Error ? err.message : "未知错误";
+            if (lastMsg?.role === "assistant") {
+              const newMsgs = [...prev];
+              newMsgs[newMsgs.length - 1] = { 
+                ...lastMsg,
+                content: lastMsg.content + `\n\n❌ 流式传输失败: ${errorMessage}`,
+                isThinkingFinished: true
+              };
+              return newMsgs;
+            }
+            return [...prev, { role: "assistant", content: `❌ 流式传输失败: ${errorMessage}` }];
+          });
+        } finally {
+            if (isTTSRef.current && bufferText.trim()) addToQueue(bufferText);
+        }
   };
 
   // --- 发送消息主逻辑 ---
@@ -175,9 +274,8 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
             // 关闭全局加载状态，显示思考过程
             setIsLoading(false);
 
-            // 注意：这里使用了新的 API 路径结构，请确保后端 api_v1.py 配置正确
-            // 如果后端前缀是 /qa，则路径为 /qa/knowledge-base
-            const res = await fetch(`${API_BASE}/qa/qa`, {
+            // 使用带重试机制的请求
+            const res = await fetchWithRetry(`${API_BASE}/qa/qa`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({ question: text })
@@ -186,20 +284,6 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
             console.log("RAG API Response Status:", res.status);
             console.log("RAG API Response Headers:", res.headers);
 
-            if (!res.ok) {
-                const errorText = await res.text();
-                try {
-                    // 尝试解析JSON格式的错误信息
-                    const errorData = JSON.parse(errorText);
-                    console.error("RAG API Error JSON:", errorData);
-                    throw new Error(errorData.detail || errorData.message || errorText);
-                } catch (parseError) {
-                    // 如果不是JSON，直接使用文本错误信息
-                    console.error("RAG API Non-JSON error response:", errorText);
-                    console.error("RAG API Parse Error:", parseError);
-                    throw new Error(errorText);
-                }
-            }
             const data = await res.json();
             console.log("RAG API Response Data:", data);
 
@@ -222,7 +306,7 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
             setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: ["🤔 正在分析对话上下文..."], isThinkingFinished: false }]);
             // 关闭全局加载状态，显示思考过程
             setIsLoading(false);
-            const res = await fetch(`${API_BASE}/chat/stream`, {
+            const res = await fetchWithRetry(`${API_BASE}/chat/stream`, {
                 method: "POST", headers, body: JSON.stringify({ session_id: currentSessionId, content: text })
             });
             await readStream(res);
@@ -232,7 +316,7 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
             setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: ["📄 正在解析职位描述..."], isThinkingFinished: false }]);
             // 关闭全局加载状态，显示思考过程
             setIsLoading(false);
-            const res = await fetch(`${API_BASE}/jd/generate-guide`, {
+            const res = await fetchWithRetry(`${API_BASE}/jd/generate-guide`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });
             await readStream(res);
@@ -242,22 +326,43 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
             setMessages(prev => [...prev, { role: "assistant", content: "", thoughts: ["🎯 正在准备模拟面试..."], isThinkingFinished: false }]);
             // 关闭全局加载状态，显示思考过程
             setIsLoading(false);
-            const res = await fetch(`${API_BASE}/interview/mock-interview/stream`, {
+            const res = await fetchWithRetry(`${API_BASE}/interview/mock-interview/stream`, {
                 method: "POST", headers, body: JSON.stringify({ jd_text: text })
             });
             await readStream(res);
         }
 
-    } catch (e: any) {
+    } catch (e) {
         console.error(e);
         setMessages(prev => {
             const lastMsg = prev[prev.length - 1];
+            const errorMessage = e instanceof Error ? e.message : "网络错误";
+            let friendlyErrorMessage = errorMessage;
+            
+            // 友好的错误信息转换
+            if (friendlyErrorMessage.includes("timeout")) {
+                friendlyErrorMessage = "请求超时，请稍后重试或检查网络连接";
+            } else if (friendlyErrorMessage.includes("401")) {
+                friendlyErrorMessage = "登录已过期，请重新登录";
+            } else if (friendlyErrorMessage.includes("500")) {
+                friendlyErrorMessage = "服务器暂时无法处理请求，请稍后重试";
+            } else if (friendlyErrorMessage.includes("Connection reset")) {
+                friendlyErrorMessage = "网络连接中断，请检查网络并重新尝试";
+            }
+
             if (lastMsg?.role === "assistant") {
                 const newMsgs = [...prev];
-                newMsgs[newMsgs.length - 1] = { role: "assistant", content: `❌ 请求失败: ${e.message || "网络错误"}` };
+                newMsgs[newMsgs.length - 1] = { 
+                    role: "assistant", 
+                    content: `❌ 请求失败: ${friendlyErrorMessage}`,
+                    isThinkingFinished: true
+                };
                 return newMsgs;
             }
-            return [...prev, { role: "assistant", content: "❌ 请求失败。" }];
+            return [...prev, { 
+                role: "assistant", 
+                content: `❌ 请求失败: ${friendlyErrorMessage}` 
+            }];
         });
     } finally {
         setIsLoading(false);

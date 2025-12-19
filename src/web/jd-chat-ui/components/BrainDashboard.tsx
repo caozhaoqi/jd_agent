@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Brain, Database, Network, ExternalLink, ChevronRight, Activity } from "lucide-react";
+import { Brain, Database, ExternalLink, Activity } from "lucide-react";
 import clsx from "clsx";
 
 // 定义数据类型

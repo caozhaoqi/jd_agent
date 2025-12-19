@@ -57,7 +57,7 @@ export default function LoginPage() {
             // --- 后端返回错误 (如用户名已存在) ---
             setError(data.detail || "操作失败，请重试");
         }
-    } catch (err) {
+    } catch {
         // --- 网络错误 ---
         setError("无法连接到服务器，请检查后端是否启动。");
     } finally {
