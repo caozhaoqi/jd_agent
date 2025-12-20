@@ -19,11 +19,17 @@ class BlogKnowledgeBase:
         """单例模式：确保全局只有一个知识库实例，避免重复加载模型占用内存"""
         if cls._instance is None:
             cls._instance = super(BlogKnowledgeBase, cls).__new__(cls)
-            cls._instance._initialize()
+            # 延迟初始化：不在创建实例时立即初始化模型
+            cls._instance._initialized = False
+            cls._instance.vector_store = None
+            cls._instance.embeddings = None
         return cls._instance
 
     def _initialize(self):
         """初始化加载模型和向量库"""
+        if self._initialized:
+            return
+            
         logger.info("📚 [KB] Initializing Blog Knowledge Base...")
         try:
             # 2. 自动检测最佳硬件设备 (MPS > CUDA > CPU)
@@ -65,9 +71,11 @@ class BlogKnowledgeBase:
                 )
                 self.vector_store = None
 
+            self._initialized = True
         except Exception as e:
             logger.error(f"❌ [KB] Init failed: {e}")
             self.vector_store = None
+            self._initialized = True  # 即使失败也标记为已初始化，避免重复尝试
 
     async def search(
         self, query: str, top_k: int = 3
@@ -76,6 +84,9 @@ class BlogKnowledgeBase:
         检索相关文档
         返回格式: {"context": "拼接好的文档内容...", "sources": ["文章A.md", "文章B.md"]}
         """
+        # 在首次使用时初始化模型
+        self._initialize()
+        
         if not self.vector_store:
             return {"context": "", "sources": []}
 

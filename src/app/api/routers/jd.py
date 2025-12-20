@@ -122,6 +122,7 @@ async def create_guide(
                     )
                     if msg is None:  # 结束信号
                         logger.info(f"📤 [Process Queue] 收到结束信号: {thread_id}")
+                        # 不在这里发送[DONE]，而是在所有内容都发送完成后统一发送
                         break
                     # 将消息添加到消息队列
                     payload = json.dumps(msg, ensure_ascii=False)
@@ -141,7 +142,9 @@ async def create_guide(
         # 定义一个协程来生成报告
         async def generate_report():
             try:
+                logger.info(f"🚀 [Generate Report] 开始生成报告: {thread_id}")
                 report = await generate_interview_guide(request, db, user.id)
+                logger.info(f"✅ [Generate Report] 报告生成成功: {thread_id}, report内容: {type(report)}")
 
                 # 存库
                 try:
@@ -174,6 +177,7 @@ async def create_guide(
 
                     # 关键修改：把 ID 塞回报告里，传给前端
                     report.session_id = new_session.id
+                    logger.info(f"💾 [Generate Report] 报告已保存到数据库: {thread_id}, session_id: {new_session.id}")
                 except Exception as e:
                     logger.error(f"❌ [DB Error] {e}")
 
@@ -184,6 +188,11 @@ async def create_guide(
                     user.id,
                     f"User上传了JD: {request.jd_text}",
                 )
+
+                # 发送结束信号到流管理器队列
+                from app.core.stream_manager import send_done
+                await send_done(thread_id)
+                logger.info(f"📤 [Generate Report] 发送结束信号: {thread_id}")
 
                 return report
             except Exception as e:
@@ -260,6 +269,15 @@ async def create_guide(
                 ensure_ascii=False,
             )
             yield f"data: {meta_payload}\n\n"
+            logger.info(f"📤 [Generate and Stream] 发送报告元数据: {thread_id}")
+
+            # 发送结果消息，通知前端解析完成
+            result_payload = json.dumps(
+                {"type": "result", "content": report.model_dump()},
+                ensure_ascii=False,
+            )
+            yield f"data: {result_payload}\n\n"
+            logger.info(f"📤 [Generate and Stream] 发送结果消息: {thread_id}")
 
         # 发送结束信号
         yield f"data: [DONE]\n\n"

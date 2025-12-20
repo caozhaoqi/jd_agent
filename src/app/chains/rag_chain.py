@@ -15,36 +15,69 @@ from app.core.llm_factory import get_llm
 
 # 1. 初始化向量数据库连接
 DB_DIR = "/Users/caozhaoqi/PycharmProjects/JD_agent/src/app/blog/chroma_db"
-embedding_model = HuggingFaceEmbeddings(model="shibing624/text2vec-base-chinese")
 
-# 检查数据库是否存在
-if os.path.exists(DB_DIR):
-    vectorstore = Chroma(persist_directory=DB_DIR, embedding_function=embedding_model)
-    # search_kwargs={"k": 3} 表示每次只找最相关的 3 个片段
-    # 修改 retriever 的定义
-    retriever = vectorstore.as_retriever(
-        search_type="similarity_score_threshold",  # 启用阈值模式
-        search_kwargs={
-            "k": 5,  # 先捞 5 个
-            "score_threshold": 0.4,  # 设定门槛 (注意：Chroma默认是距离，LangChain封装后通常转为相似度，需调试。0.4-0.6 是常用区间)
-        },
-    )
-    # 1. 定义基础检索器 (先多捞一点，比如 k=10)
-    base_retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
+# 延迟初始化组件
+_embedding_model = None
+_vectorstore = None
+_retriever = None
+_compression_retriever = None
 
-    # 2. 定义重排序器 (Reranker)
-    compressor = FlashrankRerank(
-        model="ms-marco-MiniLM-L-12-v2",  # 轻量级模型，自动下载
-        top_n=3,  # 最终只留前 3 名
-    )
 
-    # 3. 组合成新的检索器
-    compression_retriever = ContextualCompressionRetriever(
-        base_compressor=compressor, base_retriever=base_retriever
-    )
+def init_retriever():
+    """延迟初始化检索器组件"""
+    global _embedding_model, _vectorstore, _retriever, _compression_retriever
+    
+    if _retriever is not None:
+        return
+    
+    try:
+        # 只在需要时才初始化模型
+        _embedding_model = HuggingFaceEmbeddings(model="shibing624/text2vec-base-chinese")
+        
+        # 检查数据库是否存在
+        if os.path.exists(DB_DIR):
+            _vectorstore = Chroma(persist_directory=DB_DIR, embedding_function=_embedding_model)
+            # 修改 retriever 的定义
+            _retriever = _vectorstore.as_retriever(
+                search_type="similarity_score_threshold",  # 启用阈值模式
+                search_kwargs={
+                    "k": 5,  # 先捞 5 个
+                    "score_threshold": 0.4,  # 设定门槛 (注意：Chroma默认是距离，LangChain封装后通常转为相似度，需调试。0.4-0.6 是常用区间)
+                },
+            )
+            # 1. 定义基础检索器 (先多捞一点，比如 k=10)
+            base_retriever = _vectorstore.as_retriever(search_kwargs={"k": 10})
 
-else:
-    retriever = None
+            # 2. 定义重排序器 (Reranker)
+            compressor = FlashrankRerank(
+                model="ms-marco-MiniLM-L-12-v2",  # 轻量级模型，自动下载
+                top_n=3,  # 最终只留前 3 名
+            )
+
+            # 3. 组合成新的检索器
+            _compression_retriever = ContextualCompressionRetriever(
+                base_compressor=compressor, base_retriever=base_retriever
+            )
+            logger.info("✅ 检索器组件初始化成功")
+        else:
+            _retriever = None
+            logger.warning("⚠️ 向量数据库不存在，检索器未初始化")
+    except Exception as e:
+        logger.error(f"❌ 检索器组件初始化失败: {e}")
+        _retriever = None
+
+
+# 获取检索器
+def get_retriever():
+    """获取检索器实例，自动初始化"""
+    init_retriever()
+    return _retriever
+
+
+def get_compression_retriever():
+    """获取压缩检索器实例，自动初始化"""
+    init_retriever()
+    return _compression_retriever
 
 # 2. 定义 Prompt：严格限制只用上下文回答
 template = """
@@ -85,7 +118,7 @@ def extract_sources(docs):
 
 # 4. 构建 RAG 链
 def get_rag_chain(streaming: bool = False):
-    if not retriever:
+    if not get_retriever():
         raise ValueError("知识库未构建！请先运行 scripts/build_kb.py")
 
     llm = ChatOpenAI(
@@ -113,7 +146,7 @@ def get_rag_chain(streaming: bool = False):
     chain = (
         RunnableParallel(
             {
-                "docs": compression_retriever,
+                "docs": get_compression_retriever(),
                 "question": RunnablePassthrough(),
             }  # 使用 compression_retriever
         )

@@ -87,68 +87,101 @@ export function useAudioQueue({ token, onLogout }: UseAudioQueueProps) {
       });
 
       if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
 
-        const audio = globalAudioRef.current;
-        if (audio) {
-            audio.src = url;
+          const audio = globalAudioRef.current;
+          if (audio) {
+              // 重置音频对象的事件监听器
+              audio.onerror = null;
+              audio.onended = null;
+              
+              // 添加错误事件监听器，捕获流加载错误
+              audio.onerror = () => {
+                console.error("⚠️ 音频流加载失败 (Stream failed)");
+                // 清理资源
+                URL.revokeObjectURL(audio.src);
+                isPlayingRef.current = false;
+                isLoadingRef.current = false;
+                setQueueStatus(prev => ({
+                  ...prev,
+                  error: "音频流加载失败，请检查网络连接或稍后重试",
+                  isPlaying: false,
+                  isLoading: false
+                }));
+                processAudioQueue();
+              };
 
-            // 重新绑定结束事件
-            audio.onended = () => {
-              // 清理资源
-              URL.revokeObjectURL(audio.src);
-              isPlayingRef.current = false;
-              isLoadingRef.current = false;
-              updateQueueStatus();
-              processAudioQueue();
-            };
+              audio.src = url;
 
-            // 尝试播放
-            try {
-              await audio.play();
-              isLoadingRef.current = false;
-              updateQueueStatus();
-            } catch (playError) {
-              console.error("⚠️ TTS 播放被拦截，尝试继续队列:", playError);
-              // 播放失败时也清理资源
-              URL.revokeObjectURL(url);
-              isPlayingRef.current = false;
-              isLoadingRef.current = false;
-              setQueueStatus(prev => ({
-                ...prev,
-                error: "音频播放失败，可能被浏览器拦截",
-                isPlaying: false,
-                isLoading: false
-              }));
-              processAudioQueue();
-            }
-        } else {
-             // 防御性代码：如果没有 audio 对象，新建一个（虽然很少见）
-             const tempAudio = new Audio(url);
-             tempAudio.onended = () => {
-               // 清理资源
-               URL.revokeObjectURL(tempAudio.src);
-               isPlayingRef.current = false;
+              // 重新绑定结束事件
+              audio.onended = () => {
+                // 清理资源
+                URL.revokeObjectURL(audio.src);
+                isPlayingRef.current = false;
+                isLoadingRef.current = false;
+                updateQueueStatus();
+                processAudioQueue();
+              };
+
+              // 尝试播放
+              try {
+                await audio.play();
+                isLoadingRef.current = false;
+                updateQueueStatus();
+              } catch (playError) {
+                console.error("⚠️ TTS 播放被拦截，尝试继续队列:", playError);
+                // 播放失败时也清理资源
+                URL.revokeObjectURL(url);
+                isPlayingRef.current = false;
+                isLoadingRef.current = false;
+                setQueueStatus(prev => ({
+                  ...prev,
+                  error: "音频播放失败，可能被浏览器拦截",
+                  isPlaying: false,
+                  isLoading: false
+                }));
+                processAudioQueue();
+              }
+          } else {
+               // 防御性代码：如果没有 audio 对象，新建一个（虽然很少见）
+               const tempAudio = new Audio(url);
+               tempAudio.onended = () => {
+                 // 清理资源
+                 URL.revokeObjectURL(tempAudio.src);
+                 isPlayingRef.current = false;
+                 isLoadingRef.current = false;
+                 updateQueueStatus();
+                 processAudioQueue();
+               };
+               tempAudio.onerror = () => {
+                 // 播放错误时清理资源
+                 console.error("⚠️ 临时音频对象加载失败");
+                 URL.revokeObjectURL(url);
+                 isLoadingRef.current = false;
+                 setQueueStatus(prev => ({
+                   ...prev,
+                   error: "音频播放失败",
+                   isPlaying: false,
+                   isLoading: false
+                 }));
+                 processAudioQueue();
+               };
+               tempAudio.play().catch(playError => {
+                 console.error("⚠️ 临时音频对象播放失败:", playError);
+                 URL.revokeObjectURL(url);
+                 isLoadingRef.current = false;
+                 setQueueStatus(prev => ({
+                   ...prev,
+                   error: "音频播放失败",
+                   isPlaying: false,
+                   isLoading: false
+                 }));
+                 processAudioQueue();
+               });
                isLoadingRef.current = false;
                updateQueueStatus();
-               processAudioQueue();
-             };
-             tempAudio.onerror = () => {
-               // 播放错误时清理资源
-               URL.revokeObjectURL(url);
-               isLoadingRef.current = false;
-               setQueueStatus(prev => ({
-                 ...prev,
-                 error: "音频播放失败",
-                 isPlaying: false,
-                 isLoading: false
-               }));
-             };
-             tempAudio.play();
-             isLoadingRef.current = false;
-             updateQueueStatus();
-        }
+          }
       } else {
         // 处理401错误
         if (res.status === 401) {

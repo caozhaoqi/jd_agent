@@ -23,11 +23,16 @@ class ConfluenceKnowledgeBase:
         """单例模式：确保全局只有一个知识库实例"""
         if cls._instance is None:
             cls._instance = super(ConfluenceKnowledgeBase, cls).__new__(cls)
-            cls._instance._initialize()
+            cls._instance.vector_store = None
+            cls._instance.embeddings = None
+            cls._instance._initialized = False
         return cls._instance
 
     def _initialize(self):
         """初始化加载模型和向量库"""
+        if self._initialized:
+            return
+            
         logger.info("📚 [Confluence KB] Initializing Knowledge Base...")
         try:
             # 1. 自动检测最佳硬件设备 (MPS > CUDA > CPU)
@@ -51,20 +56,19 @@ class ConfluenceKnowledgeBase:
                 encode_kwargs={"normalize_embeddings": True},
             )
 
-            # 3. 加载 FAISS 向量库
+            # 3. 加载本地向量数据库
+            logger.info(f"📂 [Confluence KB] Loading FAISS index from {DB_PATH}...")
             if os.path.exists(DB_PATH):
                 self.vector_store = FAISS.load_local(
                     DB_PATH, self.embeddings, allow_dangerous_deserialization=True
                 )
-                logger.success(
-                    f"✅ [Confluence KB] Vector Store loaded successfully from: {DB_PATH}"
-                )
+                logger.success("✅ [Confluence KB] Knowledge Base initialized successfully!")
             else:
-                logger.warning(
-                    f"⚠️ [Confluence KB] Index not found at {DB_PATH}. Knowledge base functionality disabled."
-                )
+                # 如果数据库不存在，就创建一个空的
+                logger.warning(f"⚠️ [Confluence KB] Vector DB not found at {DB_PATH}, creating empty...")
                 self.vector_store = None
-
+                
+            self._initialized = True
         except Exception as e:
             logger.error(f"❌ [Confluence KB] Initialization failed: {e}")
             self.vector_store = None
@@ -82,6 +86,8 @@ class ConfluenceKnowledgeBase:
         Returns:
             包含上下文和来源链接的字典
         """
+        # 确保在使用前初始化向量库
+        self._initialize()
         if not self.vector_store:
             return {"context": "", "sources": []}
 

@@ -51,11 +51,7 @@ async def generate_interview_guide(
     if final_state is None:
         final_state = snapshot.values
 
-    # 发送结束信号到队列 - 延迟一下确保所有节点的思考过程都已发送
-    import asyncio
-
-    await asyncio.sleep(0.5)
-    await send_done(thread_id)
+    # 移除过早的结束信号发送，由jd.py在完整发送报告后统一发送[DONE]
 
     # 3. 检查是否需要人工介入
     if snapshot.next and snapshot.next[0] == "human_node":

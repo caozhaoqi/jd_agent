@@ -149,22 +149,24 @@ export function useChat({ token, mode, currentSessionId, isTTSEnabled, onDashboa
                   if (line.startsWith("data: ")) {
                           const dataStr = line.replace("data: ", "").trim();
                           if (dataStr === "[DONE]") {
-                              // 收到结束信号，标记思考过程为完成
-                              setMessages(prev => {
-                                  if (prev.length === 0) return prev;
-                                  const newMsgs = [...prev];
-                                  const lastIndex = newMsgs.length - 1;
-                                  const lastMsg = { ...newMsgs[lastIndex] };
-                                  
-                                  if (lastMsg.role === "assistant") {
-                                      lastMsg.isThinkingFinished = true;
-                                      newMsgs[lastIndex] = lastMsg;
+                                      // 收到结束信号，标记思考过程为完成
+                                      setMessages(prev => {
+                                          if (prev.length === 0) return prev;
+                                          const newMsgs = [...prev];
+                                          const lastIndex = newMsgs.length - 1;
+                                          const lastMsg = { ...newMsgs[lastIndex] };
+                                          
+                                          if (lastMsg.role === "assistant") {
+                                              lastMsg.isThinkingFinished = true;
+                                              newMsgs[lastIndex] = lastMsg;
+                                          }
+                                          
+                                          return newMsgs;
+                                      });
+                                      // 跳出所有循环，结束流处理
+                                      done = true;
+                                      break;
                                   }
-                                  
-                                  return newMsgs;
-                              });
-                              break;
-                          }
                           if (!dataStr) continue;
 
                       try {
