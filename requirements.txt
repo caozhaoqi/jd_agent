@@ -1,3 +1,4 @@
+pytest
 pyttsx3
 python-frontmatter
 livekit

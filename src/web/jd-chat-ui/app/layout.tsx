@@ -17,7 +17,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh">
-      <body>{children}</body>
+      {/* 防止浏览器或扩展在 body 上注入额外属性导致的水合警告 */}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

@@ -3,6 +3,7 @@ from app.core.models import User, ChatSession, ChatMessage
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
+from app.core.config import settings  # 导入 settings 对象
 
 # 1. 数据库设置 (使用 SQLite)
 sqlite_file_name = "database.db"
@@ -20,7 +21,8 @@ def get_session():
 
 
 # 2. 密码加密工具
-SECRET_KEY = "your-secret-key-change-it"  # 生产环境请放 .env
+# 从 settings 对象安全地获取密钥
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 
 

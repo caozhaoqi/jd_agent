@@ -4,7 +4,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.core.graph_state import AgentState
 from loguru import logger
 
-# ✅ 核心修复：显式导入所有节点函数
+# 导入所有节点函数
 from app.graph.nodes import (
     jd_parser_node,
     researcher_node,
@@ -12,86 +12,19 @@ from app.graph.nodes import (
     hr_node,
     reviewer_node,
     human_approval_node,
+    router_node,  # 导入新的调度器节点
 )
 
 
-# --- 动态智能体组合逻辑 ---
-def evaluate_jd_complexity(state: AgentState) -> str:
-    """
-    评估JD的复杂度等级
-    - 根据技术栈数量、要求年限和JD长度判断
-    """
-    tech_stack_len = len(state.get("tech_stack", []))
-    years_required = state.get("years_required", "0-1")
-    jd_len = len(state.get("jd_text", ""))
-
-    # 复杂度评估规则
-    if tech_stack_len > 8 or "5-10" in years_required or jd_len > 3000:
-        return "high"
-    elif tech_stack_len > 4 or "3-5" in years_required or jd_len > 1500:
-        return "medium"
-    else:
-        return "low"
-
-
-def select_agents(complexity: str, interview_type: str = "comprehensive") -> List[str]:
-    """
-    根据JD复杂度和面试类型动态选择智能体组合
-    - 高复杂度：完整智能体团队
-    - 中复杂度：核心智能体团队
-    - 低复杂度：简化智能体团队
-    """
-    # 基础智能体集合
-    base_agents = ["parser", "reviewer"]
-
-    # 根据面试类型添加特定智能体
-    if interview_type in ["tech", "comprehensive", "management"]:
-        base_agents.append("tech_lead")
-
-    if interview_type in ["hr", "comprehensive", "behavioral"]:
-        base_agents.append("hr_agent")
-
-    # 只有高复杂度或综合面试才添加researcher
-    if complexity == "high" or interview_type == "comprehensive":
-        base_agents.append("researcher")
-
-    return base_agents
-
-
 # --- 路由逻辑 ---
-def qa_router(state: AgentState):
+def route_next_agent(state: AgentState) -> str:
     """
-    质量控制路由逻辑
-    - 处理正常的质量评分
-    - 处理异常情况（如解析失败、网络错误等）
-    - 防止死循环
+    根据调度器节点的决策，路由到下一个Agent。
     """
-    from loguru import logger
-
-    try:
-        # 1. 强制通过机制 (防止死循环)
-        if state.get("iteration_count", 0) > 3:
-            logger.warning("⚠️ [Router] 循环次数过多，强制通过")
-            return "approved"
-
-        # 2. 检查是否有错误状态
-        if state.get("error"):
-            logger.warning(f"⚠️ [Router] 检测到错误状态: {state['error']}")
-            return "human_review_needed"
-
-        # 3. 只有分数高才通过
-        if state.get("quality_score", 0) >= 85:
-            return "approved"
-
-        # 4. 分数低 -> 进入人工介入环节
-        logger.debug(
-            f"⚠️ [Router] 质量评分 {state.get('quality_score')} < 85，需要人工审核"
-        )
-        return "human_review_needed"
-    except Exception as e:
-        logger.error(f"❌ [Router] 路由逻辑错误: {e}")
-        # 异常情况下默认进入人工审核环节
-        return "human_review_needed"
+    decision = state.get("next_agent_decision")
+    if decision == "END":
+        return END
+    return decision
 
 
 # --- 构建图 ---
@@ -104,47 +37,51 @@ workflow.add_node("tech_lead", tech_lead_node)
 workflow.add_node("hr_agent", hr_node)
 workflow.add_node("reviewer", reviewer_node)
 workflow.add_node("human_node", human_approval_node)
+workflow.add_node("router", router_node)  # 添加调度器节点
 
 # 编排流程
 # 1. Start -> Parser
 workflow.set_entry_point("parser")
 
+# 2. Parser 完成后，进入调度器
+workflow.add_edge("parser", "router")
 
-# 2. Parser -> 根据激活的智能体进行条件路由
-# --- 路由逻辑 ---
-def route_agents(state: AgentState) -> Optional[str]:
-    active_agents = state.get("active_agents", [])
-    if "researcher" in active_agents:
-        return "researcher"
-    if "hr_agent" in active_agents:
-        return "hr_agent"
-    return None
-
-
-# 添加条件边，根据活跃智能体选择路由
+# 3. 调度器根据决策路由到不同的Agent
 workflow.add_conditional_edges(
-    "parser",
-    route_agents,
+    "router",
+    route_next_agent,
     {
         "researcher": "researcher",
+        "tech_lead": "tech_lead",
         "hr_agent": "hr_agent",
-        None: "tech_lead",  # 没有匹配智能体时直接进入tech_lead
+        "reviewer": "reviewer",
+        END: END,  # 调度器可以直接决定结束
     },
 )
 
-# 3. 分支汇聚 - 确保所有路径最终都经过tech_lead和reviewer
-workflow.add_edge("hr_agent", "tech_lead")
-workflow.add_edge("researcher", "tech_lead")
+# 4. 各个Agent完成任务后，再次回到调度器，由调度器决定下一步
+workflow.add_edge("researcher", "router")
+workflow.add_edge("tech_lead", "router")
+workflow.add_edge("hr_agent", "router")
 
-# 4. 质量控制循环
-workflow.add_edge("tech_lead", "reviewer")
+# 5. Reviewer 节点后的逻辑：如果需要人工介入，则进入 human_node，否则回到调度器
+def route_after_reviewer(state: AgentState) -> str:
+    if state.get("quality_score", 0) < 85:
+        return "human_node"
+    return "router" # 质检通过，回到调度器，调度器会决定END
 
 workflow.add_conditional_edges(
-    "reviewer", qa_router, {"approved": END, "human_review_needed": "human_node"}
+    "reviewer",
+    route_after_reviewer,
+    {
+        "human_node": "human_node",
+        "router": "router",
+    },
 )
 
-# 5. 人工确认后 -> 重写
-workflow.add_edge("human_node", "tech_lead")
+# 6. 人工介入后，回到调度器，调度器会决定重新生成或结束
+workflow.add_edge("human_node", "router")
+
 
 # --- 持久化配置 ---
 checkpointer = MemorySaver()

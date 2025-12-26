@@ -6,26 +6,11 @@ from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
 from app.core.llm_factory import get_llm
 from app.schemas.interview import InterviewQuestion
-
+from app.utils.text_utils import clean_json_output  # 导入重构后的函数
 
 # 辅助模型
 class QuestionList(BaseModel):
     questions: List[InterviewQuestion]
-
-
-# ✅ 新增：清洗函数 (与 tech_gen.py 保持一致)
-def clean_json_output(text: str) -> str:
-    text = text.strip()
-    # 移除 ```json 和 结尾的 ```
-    if "```json" in text:
-        text = text.split("```json")[1]
-    elif "```" in text:
-        text = text.split("```")[1]
-
-    if text.endswith("```"):
-        text = text[:-3]
-
-    return text.strip()
 
 
 async def generate_hr_async(
@@ -63,7 +48,7 @@ async def generate_hr_async(
         """
     )
 
-    # ✅ 关键修改：构造包含清洗步骤的 Chain
+    # 构造包含清洗步骤的 Chain
     chain = (
         prompt | llm | StrOutputParser() | RunnableLambda(clean_json_output) | parser
     )

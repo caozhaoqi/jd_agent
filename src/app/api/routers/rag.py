@@ -8,7 +8,7 @@ from app.core.error_handler import (
 from pydantic import BaseModel
 from typing import List, AsyncGenerator
 import json
-from app.chains.rag_chain import ask_knowledge_base, get_rag_chain
+from app.chains.rag_chain import ask_knowledge_base
 from app.core.models import RAGResponse, RAGRequest, User
 from app.api.deps import get_current_user
 import asyncio

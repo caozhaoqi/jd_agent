@@ -1,9 +1,9 @@
 import pdfplumber
 import docx
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
 import io
-
 from loguru import logger
+from app.core.error_handler import raise_bad_request, raise_internal_error
 
 
 async def parse_resume_file(file: UploadFile) -> str:
@@ -11,18 +11,19 @@ async def parse_resume_file(file: UploadFile) -> str:
     解析上传的文件内容为纯文本
     支持: .pdf, .docx, .txt
     """
+    if not file.filename:
+        raise_bad_request("无效的文件上传，缺少文件名")
+
     filename = file.filename.lower()
     content_text = ""
 
     try:
-        # 读取文件二进制内容
         file_bytes = await file.read()
         file_stream = io.BytesIO(file_bytes)
 
         if filename.endswith(".pdf"):
             with pdfplumber.open(file_stream) as pdf:
                 for page in pdf.pages:
-                    # 提取文本，过滤空行
                     text = page.extract_text()
                     if text:
                         content_text += text + "\n"
@@ -35,15 +36,13 @@ async def parse_resume_file(file: UploadFile) -> str:
             content_text = file_bytes.decode("utf-8")
 
         else:
-            raise HTTPException(
-                status_code=400, detail="不支持的文件格式，仅支持 PDF, DOCX, TXT"
-            )
+            raise_bad_request("不支持的文件格式，仅支持 PDF, DOCX, TXT")
 
         if len(content_text.strip()) < 10:
-            raise HTTPException(status_code=400, detail="文件内容为空或无法识别")
+            raise_bad_request("文件内容为空或无法识别")
 
         return content_text
 
     except Exception as e:
-        logger.debug(f"❌ 解析文件失败: {e}")
-        raise HTTPException(status_code=500, detail=f"文件解析失败: {str(e)}")
+        logger.error(f"文件解析失败: {e}")
+        raise_internal_error(f"文件解析失败: {str(e)}", exc=e)

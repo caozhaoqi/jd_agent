@@ -51,11 +51,23 @@ export default function MessageList({
                         </div>
                     )}
 
-                    <div className="prose prose-sm max-w-none">
-                        <div className="animate-typewriter">
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
-                        </div>
-                    </div>
+                    {/* 内容区域 - 如果有内容或思考过程，显示内容；否则显示占位符 */}
+                    {(msg.content || (msg.thoughts?.length || 0) > 0) ? (
+                      <div className="prose prose-sm max-w-none">
+                          <div className="animate-typewriter">
+                              {msg.content ? (
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                              ) : (
+                                <div className="text-gray-400 italic">正在生成内容...</div>
+                              )}
+                          </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-gray-400 text-sm">
+                        <Loader2 className="animate-spin" size={14} />
+                        <span>正在思考...</span>
+                      </div>
+                    )}
                     
                     {/* 添加打字机动画样式 */}
                     <style jsx>{`
@@ -78,13 +90,28 @@ export default function MessageList({
           </div>
         ))}
 
-        {/* Loading 状态 - 发送消息后立即显示 */}
-        {isLoading && (
-          <div className="flex items-center justify-center gap-2 py-6 text-blue-600">
-            <Loader2 className="animate-spin" />
-            <span className="text-sm font-medium">系统正在处理您的请求...</span>
-          </div>
-        )}
+        {/* Loading 状态 - 只在没有 assistant 消息或没有思考过程时短暂显示 */}
+        {isLoading && (() => {
+          // 检查是否有 assistant 消息
+          const hasAssistantMessage = messages.some(msg => msg.role === "assistant");
+          if (!hasAssistantMessage) {
+            // 还没有 assistant 消息，显示连接提示
+            return (
+              <div className="flex items-center justify-center gap-2 py-6 text-blue-600">
+                <Loader2 className="animate-spin" />
+                <span className="text-sm font-medium">正在连接服务器...</span>
+              </div>
+            );
+          }
+          // 有 assistant 消息，检查是否有思考过程
+          const lastMessage = messages[messages.length - 1];
+          const hasThoughts = lastMessage?.role === "assistant" && 
+                             lastMessage?.thoughts && 
+                             lastMessage.thoughts.length > 0;
+          // 如果有思考过程，不显示通用加载提示（思考过程会显示在消息中）
+          // 如果没有思考过程但已有 assistant 消息，也不显示（等待思考消息到达）
+          return null;
+        })()}
 
         {/* ✅ 核心修复：把“开始模拟面试”按钮加回来 */}
         {showStartInterviewBtn && !isLoading && (

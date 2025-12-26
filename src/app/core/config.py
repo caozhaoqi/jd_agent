@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = True
 
+    # --- 安全配置 (高优先级) ---
+    # 必填项：如果没有在 .env 中设置，程序启动会因 Pydantic 校验失败而报错
+    SECRET_KEY: str
+
     # --- CORS 设置 (跨域) ---
     # 允许跨域请求的域名列表，生产环境建议设置为具体的域名
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
