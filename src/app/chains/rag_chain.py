@@ -1,5 +1,8 @@
 import os
 
+# 设置 HuggingFace 国内镜像
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_community.document_compressors import FlashrankRerank
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -12,6 +15,7 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.llm_factory import get_llm
+from app.interview_experience.interview_rag import InterviewExperienceRAG
 
 # 1. 初始化向量数据库连接
 DB_DIR = "/Users/caozhaoqi/PycharmProjects/JD_agent/src/app/blog/chroma_db"
@@ -37,27 +41,16 @@ def init_retriever():
         # 检查数据库是否存在
         if os.path.exists(DB_DIR):
             _vectorstore = Chroma(persist_directory=DB_DIR, embedding_function=_embedding_model)
-            # 修改 retriever 的定义
+            # 定义基础检索器
             _retriever = _vectorstore.as_retriever(
                 search_type="similarity_score_threshold",  # 启用阈值模式
                 search_kwargs={
-                    "k": 5,  # 先捞 5 个
-                    "score_threshold": 0.4,  # 设定门槛 (注意：Chroma默认是距离，LangChain封装后通常转为相似度，需调试。0.4-0.6 是常用区间)
+                    "k": 3,  # 捞 3 个相关文档
+                    "score_threshold": 0.4,  # 设定门槛
                 },
             )
-            # 1. 定义基础检索器 (先多捞一点，比如 k=10)
-            base_retriever = _vectorstore.as_retriever(search_kwargs={"k": 10})
-
-            # 2. 定义重排序器 (Reranker)
-            compressor = FlashrankRerank(
-                model="ms-marco-MiniLM-L-12-v2",  # 轻量级模型，自动下载
-                top_n=3,  # 最终只留前 3 名
-            )
-
-            # 3. 组合成新的检索器
-            _compression_retriever = ContextualCompressionRetriever(
-                base_compressor=compressor, base_retriever=base_retriever
-            )
+            # 暂时不使用重排序器，避免网络下载问题
+            _compression_retriever = _retriever
             logger.info("✅ 检索器组件初始化成功")
         else:
             _retriever = None
@@ -116,6 +109,15 @@ def extract_sources(docs):
     return list(sources)
 
 
+# 初始化面试经验RAG
+def get_interview_rag():
+    """获取面试经验RAG实例"""
+    try:
+        return InterviewExperienceRAG()
+    except Exception as e:
+        logger.error(f"❌ 初始化面试经验RAG失败: {e}")
+        return None
+
 # 4. 构建 RAG 链
 def get_rag_chain(streaming: bool = False):
     if not get_retriever():
@@ -149,6 +151,80 @@ def get_rag_chain(streaming: bool = False):
                 "docs": get_compression_retriever(),
                 "question": RunnablePassthrough(),
             }  # 使用 compression_retriever
+        )
+        .assign(answer=rag_chain_from_docs)
+        .pick(["answer", "docs"])
+    )
+
+    return chain
+
+# 构建包含面试经验的增强RAG链
+def get_enhanced_rag_chain(streaming: bool = False):
+    """构建增强的RAG链，同时使用博客知识库和面试经验知识库"""
+    if not get_retriever():
+        raise ValueError("博客知识库未构建！请先运行 scripts/build_kb.py")
+
+    llm = ChatOpenAI(
+        model_name=settings.MODEL_NAME,
+        openai_api_key=settings.OPENAI_API_KEY,
+        openai_api_base=settings.OPENAI_API_BASE,
+        temperature=0.1,  # RAG 任务温度要低，防幻觉
+        streaming=streaming,
+    )
+
+    # 获取面试经验RAG
+    interview_rag = get_interview_rag()
+
+    # 定义组合检索函数
+    def combined_retrieval(question):
+        # 从博客知识库检索
+        blog_docs = get_compression_retriever().invoke(question)
+        logger.info(f"🔍 从博客知识库检索到 {len(blog_docs)} 个文档")
+        
+        # 从面试经验知识库检索
+        interview_results = []
+        if interview_rag and interview_rag.vector_store:
+            interview_docs = interview_rag.vector_store.similarity_search(question, k=3)
+            interview_results = interview_docs
+            logger.info(f"🔍 从面试经验知识库检索到 {len(interview_results)} 个文档")
+        else:
+            logger.warning("⚠️ 面试经验知识库未初始化或为空")
+        
+        # 合并结果，优先保留博客文档，再添加面试经验文档
+        combined_docs = blog_docs + interview_results
+        
+        # 去重（根据source字段）
+        seen_sources = set()
+        unique_docs = []
+        for doc in combined_docs:
+            source = doc.metadata.get("source", "")
+            if source not in seen_sources:
+                seen_sources.add(source)
+                unique_docs.append(doc)
+        
+        logger.info(f"🔍 合并并去重后共 {len(unique_docs)} 个文档")
+        return unique_docs
+
+    # 使用 RunnableParallel 并行获取检索结果
+    rag_chain_from_docs = (
+        RunnableParallel(
+            {
+                "context": lambda x: format_docs_with_source(x["docs"]),
+                "question": lambda x: x["question"],
+            }
+        )
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    # 最终链：先检索，再把 docs 传给 rag_chain_from_docs，同时保留 docs 用于提取来源
+    chain = (
+        RunnableParallel(
+            {
+                "docs": combined_retrieval,
+                "question": RunnablePassthrough(),
+            }
         )
         .assign(answer=rag_chain_from_docs)
         .pick(["answer", "docs"])
@@ -199,7 +275,8 @@ async def ask_knowledge_base(question: str):
 
     # ---------------------------------------------------------
 
-    chain = get_rag_chain()
+    # 使用增强的RAG链，同时检索博客和面经数据
+    chain = get_enhanced_rag_chain()
 
     # 🚀 优化步骤 2: 使用改写后的问题进行检索和回答
     # 注意：这里我们用 better_question 去检索文档，但 Prompt 里还是可以让 AI 知道原始问题

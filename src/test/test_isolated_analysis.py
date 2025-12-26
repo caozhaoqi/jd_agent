@@ -164,7 +164,7 @@ def main():
         print(f"转录文本长度: {len(transcript_text)} 字符")
 
         # 保存转录结果
-        transcript_file = "test_transcript.txt"
+        transcript_file = "data/test_transcript.txt"
         with open(transcript_file, "w", encoding="utf-8") as f:
             f.write(transcript_text)
         print(f"转录结果已保存到: {transcript_file}")
@@ -197,7 +197,7 @@ def main():
             "visual_summary": visual_summary,
         }
 
-        result_file = "../../isolated_analysis_result.json"
+        result_file = "data/isolated_analysis_result.json"
         with open(result_file, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 

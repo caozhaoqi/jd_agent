@@ -331,13 +331,13 @@ def main():
 
         # 生成Markdown文档
         print("\n=== 生成Markdown文档 ===")
-        md_file = "../../paas_training_knowledge_summary.md"
+        md_file = "data/paas_training_knowledge_summary.md"
         generate_markdown_output(video_results, md_file)
 
         print(f"✓ Markdown文档已生成: {md_file}")
 
         # 保存完整JSON结果
-        json_file = "../../paas_training_knowledge_results.json"
+        json_file = "data/paas_training_knowledge_results.json"
         with open(json_file, "w", encoding="utf-8") as f:
             json.dump(video_results, f, ensure_ascii=False, indent=2)
 
