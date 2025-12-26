@@ -4,6 +4,7 @@ from sqlmodel import Session
 from loguru import logger
 import json
 import asyncio
+from pydantic import BaseModel, Field  # 导入 Field
 
 from app.api.deps import get_current_user, get_llm, get_session
 from app.schemas.interview import JDRequest
@@ -14,16 +15,13 @@ from app.core.stream_manager import clear_queue
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
-from typing import List, Optional
 
 router = APIRouter()
 
-
+# 定义 /crawl-jobs 接口的请求体模型
 class CrawlJobsRequest(BaseModel):
     keywords: str = Field(..., description="搜索关键词，如职位名称、技术栈等")
-    max_results: int = Field(10, description="最大返回结果数")
-
+    max_results: int = Field(10, description="最大返回结果数量")
 
 @router.post("/generate-guide")
 async def create_guide(
@@ -39,10 +37,6 @@ async def create_guide(
 
     async def generate_and_stream():
         from app.core.stream_manager import get_stream_queue
-        
-        # 立即发送初始进度消息，让前端知道处理已开始
-        initial_thought = json.dumps({"type": "thought", "content": "🚀 开始分析职位描述...", "detail": "正在初始化处理流程"}, ensure_ascii=False)
-        yield f"data: {initial_thought}\n\n"
 
         message_queue = asyncio.Queue()
 
@@ -89,74 +83,22 @@ async def create_guide(
                 return report
             except Exception as e:
                 logger.error(f"Generate Report Error: {e}")
-                error_payload = json.dumps({"type": "error", "content": str(e)}, ensure_ascii=False)
+                error_payload = json.dumps({"type": "error", "content": str(e)})
                 await message_queue.put(f"data: {error_payload}\n\n")
-                # 确保发送结束信号，让 process_stream_queue 能够退出
-                from app.core.stream_manager import get_stream_queue
-                queue = get_stream_queue(thread_id)
-                if queue:
-                    await queue.put(None)
                 return None
 
         report_task = asyncio.create_task(generate_report())
         queue_task = asyncio.create_task(process_stream_queue())
 
-        # 等待两个任务完成，同时处理消息队列
-        queue_done = False
-        while not report_task.done() or not queue_done:
+        while not report_task.done() or not queue_task.done():
             try:
-                # 如果队列任务已完成，不再等待新消息
-                if queue_task.done():
-                    queue_done = True
-                    # 尝试获取剩余消息，但不阻塞太久
-                    try:
-                        msg = await asyncio.wait_for(message_queue.get(), timeout=0.1)
-                        if msg:
-                            yield msg
-                    except asyncio.TimeoutError:
-                        pass
-                else:
-                    # 队列任务还在运行，正常读取消息
-                    msg = await asyncio.wait_for(message_queue.get(), timeout=0.1)
-                    if msg:
-                        yield msg
+                msg = await asyncio.wait_for(message_queue.get(), timeout=0.1)
+                if msg:
+                    yield msg
             except asyncio.TimeoutError:
-                # 检查任务是否出错
-                if report_task.done() and report_task.exception():
-                    error = report_task.exception()
-                    logger.error(f"Report generation failed: {error}")
-                    error_payload = json.dumps({"type": "error", "content": str(error)}, ensure_ascii=False)
-                    yield f"data: {error_payload}\n\n"
-                    yield "data: [DONE]\n\n"
-                    clear_queue(thread_id)
-                    return
-                # 如果队列任务已完成，检查报告任务状态
-                if queue_task.done() and not report_task.done():
-                    # 等待报告任务完成
-                    await asyncio.sleep(0.1)
-                    continue
+                continue
         
-        # 确保所有队列消息都已发送（处理队列任务完成后剩余的消息）
-        if not queue_done:
-            try:
-                while True:
-                    msg = await asyncio.wait_for(message_queue.get(), timeout=0.1)
-                    if msg:
-                        yield msg
-            except asyncio.TimeoutError:
-                pass  # 队列已空
-        
-        # 获取报告结果
-        try:
-            report = await report_task
-        except Exception as e:
-            logger.error(f"Failed to get report: {e}")
-            error_payload = json.dumps({"type": "error", "content": str(e)}, ensure_ascii=False)
-            yield f"data: {error_payload}\n\n"
-            yield "data: [DONE]\n\n"
-            clear_queue(thread_id)
-            return
-        
+        report = await report_task
         if report:
             def format_report_to_markdown(report):
                 meta = report.meta
@@ -168,11 +110,11 @@ async def create_guide(
                     markdown += f"> 🏢 **公司**: {company_analysis}\n\n"
                 markdown += "### 🛠️ 推荐技术题\n"
                 for i, q in enumerate(tech_questions, 1):
-                    markdown += f"**Q{i}: {q.question}**\n> {q.reference_answer}\n\n"
+                    markdown += f"**Q{i+1}: {q.question}**\n> {q.reference_answer}\n\n"
                 if hr_questions:
                     markdown += "### 🧑💼 推荐HR题\n"
                     for i, q in enumerate(hr_questions, 1):
-                        markdown += f"**Q{i}: {q.question}**\n> {q.reference_answer}\n\n"
+                        markdown += f"**Q{i+1}: {q.question}**\n> {q.reference_answer}\n\n"
                 return markdown
 
             markdown_content = format_report_to_markdown(report)
@@ -186,18 +128,18 @@ async def create_guide(
             
             result_payload = json.dumps({"type": "result", "content": report.model_dump()}, ensure_ascii=False)
             yield f"data: {result_payload}\n\n"
-        else:
-            # 如果 report 为 None，说明生成失败，但错误应该已经在上面处理了
-            logger.warning("Report is None, but no error was caught")
 
-        # 确保发送结束信号
         yield "data: [DONE]\n\n"
         clear_queue(thread_id)
 
     return StreamingResponse(
         generate_and_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -206,7 +148,7 @@ async def stream_system_design(
     tech_stack: str,
     topic: str,
     user: User = Depends(get_current_user),
-    llm: ChatOpenAI = Depends(get_llm),  # 使用依赖注入获取 LLM
+    llm: ChatOpenAI = Depends(get_llm),
 ):
     """
     流式生成系统设计题答案 (打字机效果)
@@ -224,70 +166,41 @@ async def stream_system_design(
     return StreamingResponse(
         generate_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
-
 @router.post("/crawl-jobs")
-async def crawl_related_jobs(
-    request: CrawlJobsRequest,
-    user: User = Depends(get_current_user),
-):
+async def crawl_related_jobs(request: CrawlJobsRequest):
     """
-    爬取相关岗位数据
-    根据关键词搜索相关岗位信息
+    根据关键词爬取相关岗位JD
     """
-    import os
     from langchain_community.tools.tavily_search import TavilySearchResults
-    
+
+    # 扩展关键词以获得更好的搜索结果
+    search_query = f"{request.keywords} 招聘 岗位 JD 职位描述"
+    logger.info(f"🔍 开始搜索相关岗位: {search_query}")
+
     try:
-        # 检查是否有 Tavily API Key
-        tavily_key = os.environ.get("TAVILY_API_KEY")
-        if not tavily_key:
-            return {
-                "status": "error",
-                "message": "未配置搜索服务，无法爬取岗位数据",
-                "data": []
-            }
-        
-        # 初始化搜索工具
+        # 使用 Tavily 搜索引擎
         search_tool = TavilySearchResults(max_results=request.max_results, timeout=10)
+        results = await search_tool.ainvoke(search_query)
         
-        # 构建搜索查询
-        search_query = f"{request.keywords} 招聘 岗位 JD 职位描述"
-        
-        logger.info(f"🔍 开始搜索相关岗位: {search_query}")
-        
-        # 执行搜索
-        try:
-            results = await search_tool.ainvoke(search_query)
-        except:
-            results = search_tool.invoke(search_query)
-        
-        # 处理搜索结果
+        # 提取并格式化结果
         jobs = []
-        if isinstance(results, list):
-            for item in results:
-                if isinstance(item, dict):
-                    jobs.append({
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "content": item.get("content", "")[:500],  # 限制内容长度
-                        "score": item.get("score", 0)
-                    })
+        for res in results:
+            jobs.append({
+                "title": res.get("title", "无标题"),
+                "url": res.get("url", "#"),
+                "snippet": res.get("content", "无摘要") # Tavily 返回的是 content
+            })
         
         logger.info(f"✅ 成功爬取 {len(jobs)} 个相关岗位")
-        
-        return {
-            "status": "success",
-            "message": f"成功爬取 {len(jobs)} 个相关岗位",
-            "data": jobs
-        }
-        
+        return {"status": "success", "jobs": jobs}
+
     except Exception as e:
-        logger.error(f"❌ 爬取岗位数据失败: {e}")
-        return {
-            "status": "error",
-            "message": f"爬取失败: {str(e)}",
-            "data": []
-        }
+        logger.error(f"爬取岗位失败: {e}")
+        return {"status": "error", "message": str(e)}

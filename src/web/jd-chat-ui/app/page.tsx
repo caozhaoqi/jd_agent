@@ -4,12 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import clsx from "clsx";
-import { Volume2, VolumeX, PanelRightOpen, PanelRightClose, Database, Search, Loader2 } from "lucide-react";
+import { Volume2, VolumeX, PanelRightOpen, PanelRightClose, Database } from "lucide-react";
 
 // Stores and Hooks
 import { useSessionStore } from "@/stores/useSessionStore";
 import { useMessageStore } from "@/stores/useMessageStore";
-import { useChatStream, API_BASE } from "@/hooks/useChat"; // 修复：从正确的文件名 useChat 导入
+import { useChatStream, API_BASE } from "@/hooks/useChat";
 import { ChatMode } from "@/types/chat";
 
 // Components
@@ -23,16 +23,13 @@ export default function Home() {
   const router = useRouter();
 
   // --- Global State from Stores ---
-  const { token, currentSessionId, initializeAuth, fetchSessions, hasHydrated } = useSessionStore();
+  const { token, currentSessionId, initializeAuth, logout, fetchSessions } = useSessionStore();
   const { messages, isLoading, showStartInterviewBtn, setMessages, resetMessages } = useMessageStore();
 
   // --- Local UI State ---
   const [mode, setMode] = useState<ChatMode | 'rag'>("guide");
   const [showDashboard, setShowDashboard] = useState(true);
   const [isTTSEnabled, setIsTTSEnabled] = useState(true);
-  const [isCrawling, setIsCrawling] = useState(false);
-  const [crawlResults, setCrawlResults] = useState<any[]>([]);
-  const [showCrawlResults, setShowCrawlResults] = useState(false);
   const [dashboardData, setDashboardData] = useState<DashboardState>({
     currentStep: "", userProfile: [], ragSources: []
   });
@@ -44,47 +41,49 @@ export default function Home() {
     onDashboardUpdate: (key, value) => {
       setDashboardData(prev => ({ ...prev, [key]: value }));
     },
+    onSessionCreated: (id) => {
+      // 后端创建新会话后，刷新侧边栏列表
+      fetchSessions();
+    },
+    onLogout: logout,
   });
 
   // --- Effects ---
 
-  // Initialize auth and fetch sessions on mount
   useEffect(() => {
     initializeAuth();
   }, [initializeAuth]);
 
-  // Redirect to login if token is lost
   useEffect(() => {
-    if (!hasHydrated) return; // 等待本地存储同步完成
     if (!token) {
       router.push("/login");
     }
-  }, [token, router, hasHydrated]);
-
-  // Fetch messages when session changes
-  useEffect(() => {
-    const loadMessages = async () => {
-      if (!hasHydrated) return;
-      if (currentSessionId && token) {
-        try {
-          const res = await fetch(`${API_BASE}/chat/history/messages/${currentSessionId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const msgs = await res.json();
-            setMessages(msgs);
-          } else if (res.status === 401) {
-            useSessionStore.getState().logout();
-          }
-        } catch (e) {
-          console.error("Failed to fetch messages:", e);
-        }
-      }
-    };
-    loadMessages();
-  }, [currentSessionId, token, setMessages, hasHydrated]);
+  }, [token, router]);
 
   // --- Event Handlers ---
+
+  const handleLoadSession = async (id: number) => {
+    if (!token) return;
+
+    // 核心修复：将加载逻辑移到这里
+    resetMessages();
+    useSessionStore.getState().setCurrentSessionId(id);
+    setMode('mock');
+
+    try {
+      const res = await fetch(`${API_BASE}/chat/history/messages/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const msgs = await res.json();
+        setMessages(msgs);
+      } else if (res.status === 401) {
+        logout();
+      }
+    } catch (e) {
+      console.error("Failed to fetch messages:", e);
+    }
+  };
 
   const handleModeChange = (newMode: ChatMode | 'rag') => {
     setMode(newMode);
@@ -98,56 +97,12 @@ export default function Home() {
     sendMessage("我准备好了，请开始模拟面试。");
   };
 
-  const handleCrawlJobs = async () => {
-    if (!token) return;
-    
-    // 从最后一条用户消息中提取关键词，如果没有则使用默认值
-    const lastUserMessage = messages.filter(m => m.role === "user").pop();
-    const keywords = lastUserMessage?.content || "Python 后端开发";
-    
-    setIsCrawling(true);
-    setShowCrawlResults(false);
-    
-    try {
-      const res = await fetch(`${API_BASE}/jd/crawl-jobs`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          keywords: keywords,
-          max_results: 10,
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (data.status === "success") {
-        setCrawlResults(data.data || []);
-        setShowCrawlResults(true);
-        // 将结果添加到消息中
-        const resultText = `## 📊 相关岗位数据 (共 ${data.data.length} 条)\n\n${data.data.map((job: any, idx: number) => 
-          `### ${idx + 1}. ${job.title || '未知职位'}\n**来源**: [${job.url || '未知'}](${job.url || '#'})\n\n${job.content ? `**描述**: ${job.content.substring(0, 200)}...` : ''}\n\n`
-        ).join('')}`;
-        setMessages([...messages, { role: "assistant", content: resultText }]);
-      } else {
-        alert(`爬取失败: ${data.message}`);
-      }
-    } catch (e) {
-      console.error("爬取岗位数据失败:", e);
-      alert("爬取失败，请稍后重试");
-    } finally {
-      setIsCrawling(false);
-    }
-  };
-
   return (
     <div className="flex h-screen bg-[#f9fafb] text-gray-800 font-sans overflow-hidden">
-      <Sidebar mode={mode as ChatMode} setMode={handleModeChange} />
+      {/* 核心修复：将 handleLoadSession 传递给 Sidebar */}
+      <Sidebar mode={mode as ChatMode} setMode={handleModeChange} onLoadSession={handleLoadSession} />
 
       <div className="flex-1 flex flex-col h-full bg-white min-w-0 relative">
-        {/* Header */}
         <div className="h-14 border-b flex items-center justify-between px-4 flex-shrink-0">
           <div className="flex items-center gap-3">
             <span className="font-bold text-lg text-gray-800">
@@ -162,29 +117,6 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {mode === 'guide' && (
-              <button
-                onClick={handleCrawlJobs}
-                disabled={isCrawling || !token}
-                className={clsx("flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all border",
-                  isCrawling 
-                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" 
-                    : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                )}
-              >
-                {isCrawling ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span className="hidden sm:inline">爬取中...</span>
-                  </>
-                ) : (
-                  <>
-                    <Search size={16} />
-                    <span className="hidden sm:inline">爬取岗位</span>
-                  </>
-                )}
-              </button>
-            )}
             <button
               onClick={() => handleModeChange(mode === 'rag' ? 'guide' : 'rag')}
               className={clsx("flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all border",

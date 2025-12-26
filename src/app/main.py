@@ -9,16 +9,17 @@ from prometheus_client import (
 )
 
 # ===== 添加在文件最开头 =====
-# 设置HuggingFace国内镜像源
+# 设置HuggingFace国内镜像源和缓存目录
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-os.environ["HF_HOME"] = "./.huggingface"
-os.environ["TRANSFORMERS_CACHE"] = "./.transformers_cache"
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = "./.sentence_transformers"
+# 使用 HF_HOME 作为唯一的缓存目录，兼容新版 transformers
+os.environ["HF_HOME"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".huggingface_cache")
+os.environ["SENTENCE_TRANSFORMERS_HOME"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".sentence_transformers")
+
 
 print("=" * 50)
 print("🎯 HuggingFace配置信息:")
 print(f"🔗 镜像源: {os.environ.get('HF_ENDPOINT')}")
-print(f"📁 缓存目录: {os.environ.get('HF_HOME')}")
+print(f"📁 缓存目录 (HF_HOME): {os.environ.get('HF_HOME')}")
 print("=" * 50)
 
 from fastapi import FastAPI, Request, HTTPException
@@ -74,7 +75,6 @@ app = FastAPI(
 origins = [
     "http://localhost",
     "http://localhost:3000",
-    # "http://localhost:3001"
 ]
 
 app.add_middleware(
@@ -116,7 +116,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     request_id = getattr(request.state, "request_id", "")
 
     if isinstance(exc, APIException):
-        # 处理自定义API异常
         error_response = ErrorResponse(
             code=exc.code,
             message=exc.detail["message"],
@@ -131,7 +130,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         and isinstance(exc.detail, dict)
         and "status" in exc.detail
     ):
-        # 处理已经是统一格式的HTTP异常
         error_response = ErrorResponse(
             code=exc.detail.get("code", ErrorCode.INTERNAL_SERVER_ERROR),
             message=exc.detail.get("message", "服务器内部错误"),
@@ -142,7 +140,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             status_code=exc.status_code, content=error_response.model_dump()
         )
 
-    # 处理标准HTTPException
     error_response = ErrorResponse(
         code=(
             ErrorCode.INTERNAL_SERVER_ERROR
@@ -166,7 +163,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 
     request_id = getattr(request.state, "request_id", "")
 
-    # 其他未处理的异常
     error_response = ErrorResponse(
         code=ErrorCode.INTERNAL_SERVER_ERROR,
         message="服务器内部错误",
@@ -196,4 +192,4 @@ async def metrics():
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True, log_config=None)
