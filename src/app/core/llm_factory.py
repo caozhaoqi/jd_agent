@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from app.core.config import settings
+from app.core.settings import settings
 from app.core.redis_client import redis_client
 import hashlib
 import json
