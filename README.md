@@ -41,6 +41,12 @@
 - **简历解析**: 上传 PDF/Word 简历，自动提取画像存入 SQLModel 数据库。
 - **会话回溯**: 侧边栏管理历史会话，AI 永远记得你的技术栈偏好。
 
+### 📝 5. 智能日志系统
+- **前端日志自动保存**: 集成开源日志库 loglevel，自动将前端日志保存到服务器指定目录
+- **日志分级与分类**: 按级别（trace、debug、info、warn、error）和类别（stream、auth、ui、network、state、component、general）组织日志
+- **日志轮转与清理**: 自动管理日志文件大小，超过10MB时轮转，7天后自动清理
+- **日志查看与分析**: 提供强大的日志过滤、搜索和导出功能，支持多种格式（JSON、CSV、文本、统计报告）
+
 ---
 
 ## 🏗️ 技术架构 (Architecture)
@@ -153,6 +159,18 @@ npm run dev
 3.  **按住麦克风** 回答问题，AI 会识别语音并进行追问。
 4.  开启右上角的 **语音开关**，体验全语音对话。
 
+### 📝 模式三：日志系统管理
+1. 访问日志系统测试页面：在浏览器中访问 `http://localhost:3000/logs`
+2. 查看当前日志：使用页面上的日志查看器查看前端实时生成的日志
+3. 测试日志功能：
+   - 点击"生成测试日志"按钮创建示例日志
+   - 切换"自动保存"开关启用/禁用日志自动保存
+   - 调整"自动保存间隔"设置日志保存频率
+   - 点击"手动保存日志"立即保存当前日志
+   - 点击"测试服务器连接"验证与后端的连接
+4. 导出日志：使用日志查看器的导出功能将日志保存为JSON、CSV或文本格式
+5. 筛选与搜索：使用日志查看器的过滤功能按级别、类别、日期范围或关键词查找日志
+
 ---
 
 ## 📂 项目结构
@@ -161,19 +179,21 @@ npm run dev
 jd_agent/
 ├── src/
 │   ├── app/                 # 后端应用
-│   │   ├── api/             # FastAPI 路由接口 (Stream, Auth, Audio)
+│   │   ├── api/             # FastAPI 路由接口 (Stream, Auth, Audio, Logs)
 │   │   ├── chains/          # LangChain 原子能力 (Generator, Parser)
 │   │   ├── core/            # 核心配置 (Config, DB, LLM Factory) & 统一错误处理
 │   │   ├── graph/           # LangGraph 多智能体编排 (Nodes, Workflow) - 含人工介入节点
 │   │   └── services/        # 业务逻辑层
 │   ├── web/                 # 前端应用
 │   │   └── jd-chat-ui/      # Next.js 前端
-│   │       ├── app/         # 页面组件
-│   │       ├── components/  # UI 组件 (ChatInput, BrainDashboard, AudioQueue)
+│   │       ├── app/         # 页面组件 (包括日志系统测试页面 /logs)
+│   │       ├── components/  # UI 组件 (ChatInput, BrainDashboard, AudioQueue, LogViewer)
 │   │       ├── hooks/       # 自定义 Hooks (useChat, useAudio)
 │   │       ├── types/       # TypeScript 类型定义
+│   │       ├── utils/       # 工具库 (logger.ts - 日志系统核心实现)
 │   │       └── next.config.js # Next.js 配置文件 (含 API 代理设置)
 │   └── prompts/             # Prompt YAML 模板管理
+├── logs/                    # 日志文件存储目录 (由后端API创建与管理)
 ├── tests/                   # 测试用例
 ├── requirements.txt         # 后端依赖列表
 └── README.md                # 项目文档
@@ -200,6 +220,12 @@ jd_agent/
   - [x] 确保所有测试文件符合 PEP8 代码规范
   - [x] 改进代码缩进、字符串格式化和空白行处理
   - [x] 提升代码可读性和可维护性
+- [x] **v3.4**: 智能日志系统
+  - [x] 实现基于 loglevel 的前端日志系统
+  - [x] 开发后端日志存储 API (logs.py)
+  - [x] 实现日志文件轮转和自动清理功能
+  - [x] 创建 LogViewer 组件用于日志查看和分析
+  - [x] 开发日志系统测试页面 (/logs)
 - [ ] **v4.0**: WebRTC 超低延迟通话 (打断式交互)
 - [ ] **v5.0**: 多模态简历分析 (支持图片/PDF 图表读取)
 
