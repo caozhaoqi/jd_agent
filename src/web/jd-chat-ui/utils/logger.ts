@@ -16,6 +16,9 @@ export interface LogEntry {
 class FileLogger {
   private logs: LogEntry[] = [];
   private maxLogs = 1000; // 最大保存日志数量
+  private autoSaveInterval: number | null = null; // 自动保存定时器ID
+  private lastAutoSaveTime: number = 0; // 上次自动保存的时间戳
+  private logDirectory: string = 'logs'; // 默认日志保存目录
 
   // 设置日志级别
   setLevel(level: LogLevel) {
@@ -25,6 +28,81 @@ class FileLogger {
   // 获取当前日志级别
   getLevel(): LogLevel {
     return log.getLevel() as unknown as LogLevel;
+  }
+
+  // 设置自动保存功能
+  enableAutoSave(intervalMs: number = 60000) {
+    // 清除现有的定时器（如果存在）
+    if (this.autoSaveInterval) {
+      clearInterval(this.autoSaveInterval);
+    }
+    
+    // 设置新的定时器
+    this.autoSaveInterval = window.setInterval(() => {
+      this.saveLogsToServer();
+    }, intervalMs);
+    
+    this.info('general', `自动保存功能已启用，间隔 ${intervalMs/1000} 秒`);
+  }
+  
+  // 禁用自动保存功能
+  disableAutoSave() {
+    if (this.autoSaveInterval) {
+      clearInterval(this.autoSaveInterval);
+      this.autoSaveInterval = null;
+      this.info('general', '自动保存功能已禁用');
+    }
+  }
+  
+  // 向服务器发送日志
+  private async saveLogsToServer() {
+    if (this.logs.length === 0) return;
+    
+    try {
+      const currentTime = Date.now();
+      // 避免过于频繁的保存操作（至少间隔10秒）
+      if (currentTime - this.lastAutoSaveTime < 10000) {
+        return;
+      }
+      
+      const logsToSave = [...this.logs]; // 复制日志数组
+      this.logs = []; // 清空当前日志数组
+      
+      this.lastAutoSaveTime = currentTime;
+      
+      const response = await fetch('/api/logs/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          logs: logsToSave,
+          timestamp: new Date().toISOString()
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`服务器响应错误: ${response.status}`);
+      }
+      
+      this.info('general', `成功保存 ${logsToSave.length} 条日志到服务器`);
+    } catch (error) {
+      this.error('general', '保存日志到服务器失败', { error });
+      // 恢复日志数组
+      this.logs = this.logs;
+    }
+  }
+  
+  // 手动触发日志保存
+  async saveLogsManually() {
+    this.info('general', '手动触发日志保存');
+    return await this.saveLogsToServer();
+  }
+  
+  // 设置日志目录
+  setLogDirectory(directory: string) {
+    this.logDirectory = directory;
+    this.info('general', `日志保存目录设置为: ${directory}`);
   }
 
   // 通用日志方法
@@ -150,6 +228,17 @@ class FileLogger {
   clear() {
     this.logs = [];
     log.info('[LOGGER] 日志已清空');
+  }
+  
+  // 销毁方法，用于清理资源
+  destroy() {
+    // 禁用自动保存
+    this.disableAutoSave();
+    
+    // 在销毁前尝试保存剩余日志
+    this.saveLogsToServer();
+    
+    this.info('general', '日志系统已销毁');
   }
 
   // 获取统计信息

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css"; // <--- 🔴 必须有这一行！检查路径是否正确
 import type { ReactNode } from "react";
+import { logger } from "@/utils/logger";
 
 export const metadata: Metadata = {
   title: "JD Agent - AI 面试助手",
@@ -15,6 +16,20 @@ export default function RootLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
+  // 在页面加载时启用自动保存功能
+  if (typeof window !== 'undefined') {
+    // 设置默认日志目录
+    logger.setLogDirectory('/logs');
+    
+    // 启用自动保存功能，每30秒保存一次
+    logger.enableAutoSave(30000);
+    
+    // 在页面关闭时尝试保存剩余日志
+    window.addEventListener('beforeunload', () => {
+      logger.saveLogsManually();
+    });
+  }
+
   return (
     <html lang="zh">
       {/* 防止浏览器或扩展在 body 上注入额外属性导致的水合警告 */}

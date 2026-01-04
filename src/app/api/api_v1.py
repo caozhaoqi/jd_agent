@@ -10,6 +10,7 @@ from api.routers import (
     jd,
     video_analysis,
     confluence,
+    logs,
 )
 
 api_router = APIRouter()
@@ -28,3 +29,4 @@ api_router.include_router(
     video_analysis.router, prefix="/video", tags=["Video Analysis"]
 )
 api_router.include_router(confluence.router, prefix="/confluence", tags=["Confluence"])
+api_router.include_router(logs.router, prefix="/logs", tags=["Logs"])
