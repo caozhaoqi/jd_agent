@@ -35,6 +35,19 @@ useEffect(() => {
     // 将 showStartInterviewBtn 加入依赖，因为它的出现会改变内容高度
 }, [messages, isLoading, showStartInterviewBtn]);
 
+useEffect(() => {
+  // 调试：打印所有消息及其思考内容
+  messages.forEach((msg, idx) => {
+    if (msg.role === 'assistant') {
+      console.log(`🔍 [MessageList] Assistant message #${idx}:`, { 
+        hasThoughts: !!msg.thoughts, 
+        thoughtsLength: msg.thoughts?.length || 0,
+        isThinkingFinished: msg.isThinkingFinished 
+      });
+    }
+  });
+}, [messages]);
+
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth relative bg-white">
       <div className="max-w-3xl mx-auto space-y-8 pb-10">
@@ -54,10 +67,10 @@ useEffect(() => {
               {msg.role === "assistant" ? (
                 <div className="flex flex-col">
                   {/* 气泡内的思考逻辑 */}
-                  <ThinkingReveal
-                    thoughts={msg.thoughts || []}
-                    isFinished={msg.isThinkingFinished || false}
-                  />
+                   <ThinkingReveal
+                     thoughts={msg.thoughts || []}
+                     isFinished={msg.isThinkingFinished || false}
+                   />
 
                   {/* 回复正文 */}
                   {(msg.content || msg.isThinkingFinished) && (

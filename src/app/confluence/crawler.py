@@ -3,9 +3,9 @@ import sys
 import time
 from typing import List, Dict, Any, Optional
 from atlassian import Confluence
-from app.utils.logger import logger
-from app.confluence.config import confluence_config
-from app.confluence.confluence_kb import ConfluencePage, ConfluenceKnowledgeBase
+from utils.logger import logger
+from confluence.config import confluence_config
+from confluence.confluence_kb import ConfluencePage, ConfluenceKnowledgeBase
 
 
 class ConfluenceCrawler:

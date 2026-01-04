@@ -58,6 +58,33 @@ class Settings(BaseSettings):
     ASR_MODEL: str = "whisper-1"
     TTS_MODEL: str = "tts-1"
 
+    # --- 向量数据库配置 ---
+    VECTOR_DB_PATH: str = "/Users/caozhaoqi/PycharmProjects/JD_agent/src/app/data/vector_db"
+    VECTOR_DB_COLLECTION: str = "jd_agent_knowledge"
+
+    # --- 嵌入模型配置 ---
+    EMBEDDING_MODEL: str = "shibing624/text2vec-base-chinese"
+    EMBEDDING_MODEL_NAME: str = "shibing624/text2vec-base-chinese"
+
+    # --- 爬虫配置 ---
+    CRAWLER_DELAY_MIN: float = 2.0
+    CRAWLER_DELAY_MAX: float = 5.0
+    CRAWLER_MAX_RETRIES: int = 3
+
+    # --- 缓存配置 ---
+    CACHE_TTL: int = 3600
+    CACHE_MAX_SIZE: int = 1000
+
+    # --- HuggingFace 配置 ---
+    HF_ENDPOINT: str = "https://hf-mirror.com"
+
+    # --- 日志配置 ---
+    LOG_LEVEL: str = "INFO"
+
+    # --- 模型配置 ---
+    MODEL_MAX_TOKENS: int = 1000
+    MODEL_TEMPERATURE: float = 0.1
+
     @property
     def effective_audio_key(self):
         return self.AUDIO_API_KEY or self.OPENAI_API_KEY

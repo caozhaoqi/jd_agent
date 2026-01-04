@@ -15,6 +15,13 @@ export default function ThinkingReveal({ thoughts, isFinished }: ThinkingRevealP
   const startTimeRef = useRef<number>(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 添加调试信息
+  console.log("🔍 [ThinkingReveal] Rendering with:", { 
+    thoughts, 
+    isFinished, 
+    thoughtsLength: thoughts?.length || 0 
+  });
+
   useEffect(() => {
     if (!isFinished) {
       timerRef.current = setInterval(() => {

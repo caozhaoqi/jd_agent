@@ -8,9 +8,9 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from loguru import logger
 
-from app.core.config import settings
-from app.core.llm_factory import get_llm
-from app.core.redis_client import redis_client
+from core.config import settings
+from core.llm_factory import get_llm
+from core.redis_client import redis_client
 
 
 # ❌ 移除全局初始化，防止启动时因缺少 Key 崩溃

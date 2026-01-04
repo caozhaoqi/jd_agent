@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
-from app.core.knowledge_base import kb_engine
-from app.chains.company_research import research_company
+from core.knowledge_base import kb_engine
+from chains.company_research import research_company
 
 
 # 1. 定义查博客工具

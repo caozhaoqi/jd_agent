@@ -1,17 +1,17 @@
 import asyncio
-from app.core.graph_state import AgentState
-from app.core.llm_factory import get_llm
-from app.chains.jd_parser import parse_jd_async
-from app.chains.company_research import research_company
-from app.chains.tech_gen import generate_tech_async
-from app.chains.hr_gen import generate_hr_async
+from core.graph_state import AgentState
+from core.llm_factory import get_llm
+from chains.jd_parser import parse_jd_async
+from chains.company_research import research_company
+from chains.tech_gen import generate_tech_async
+from chains.hr_gen import generate_hr_async
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from loguru import logger
-from app.core.stream_manager import send_thought, send_data
-from app.core.retry import retry_async
+from core.stream_manager import send_thought, send_data
+from core.retry import retry_async
 
 # --- Router Node: 调度器 ---
 class RouterDecision(BaseModel):

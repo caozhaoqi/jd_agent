@@ -16,7 +16,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 try:
     from app.core.config import settings
 
-    print(f"使用的模型: {settings.MODEL_NAME}")
+    print(f"使用的模型: {settings.LLM_MODEL_NAME}")
     print(f"使用的API Base: {settings.OPENAI_API_BASE}")
 
     # 使用之前转录得到的文本文件
@@ -51,7 +51,7 @@ try:
         start_time = time.time()
 
         response = client.chat.completions.create(
-            model=settings.MODEL_NAME,
+            model=settings.LLM_MODEL_NAME,
             messages=messages,
             response_format={"type": "json_object"},
         )

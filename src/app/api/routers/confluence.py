@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Dict, List, Any
-from app.utils.logger import logger
-from app.confluence.confluence_rag import confluence_kb_engine
-from app.core.error_handler import raise_internal_error
+from utils.logger import logger
+from confluence.confluence_rag import confluence_kb_engine
+from core.error_handler import raise_internal_error
 
 router = APIRouter()
 

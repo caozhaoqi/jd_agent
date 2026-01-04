@@ -3,8 +3,8 @@ import json
 from loguru import logger
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from app.core.llm_factory import get_llm
-from app.chains.mock_agents import get_interviewer_chain, get_candidate_chain
+from core.llm_factory import get_llm
+from chains.mock_agents import get_interviewer_chain, get_candidate_chain
 
 
 def format_sse(role: str, content: str) -> str:
@@ -91,7 +91,7 @@ async def run_mock_interview_stream(
         # 6. 发送结束信号 (一定要放在最后！)
         yield format_sse("done", "[DONE]")
     except Exception as e:
-        from app.schemas import ErrorCode
+        from schemas import ErrorCode
 
         logger.error(f"Mock interview error: {e}")
         # 发送标准化错误响应

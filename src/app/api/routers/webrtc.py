@@ -1,8 +1,8 @@
 import os
 from fastapi import APIRouter, Depends
 from livekit import api
-from app.api.deps import get_current_user
-from app.core.models import User
+from api.deps import get_current_user
+from core.models import User
 
 router = APIRouter()
 

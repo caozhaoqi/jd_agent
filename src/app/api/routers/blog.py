@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import List
-from app.services.blog_service import chat_with_blog
-from app.api.deps import get_current_user
-from app.core.models import User
+from services.blog_service import chat_with_blog
+from api.deps import get_current_user
+from core.models import User
 
 router = APIRouter()
 

@@ -2,7 +2,7 @@ import os
 import json
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
-from app.utils.logger import logger
+from utils.logger import logger
 
 
 class ConfluencePage:

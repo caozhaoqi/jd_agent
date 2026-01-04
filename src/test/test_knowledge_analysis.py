@@ -16,7 +16,7 @@ try:
     from app.api.routers.video_analysis import analyze_key_knowledge
     from app.core.config import settings
 
-    print(f"使用的模型: {settings.MODEL_NAME}")
+    print(f"使用的模型: {settings.LLM_MODEL_NAME}")
     print(f"使用的API Base: {settings.OPENAI_API_BASE}")
 
     # 使用之前转录得到的文本文件

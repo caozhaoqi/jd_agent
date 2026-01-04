@@ -3,7 +3,7 @@ import docx
 from fastapi import UploadFile
 import io
 from loguru import logger
-from app.core.error_handler import raise_bad_request, raise_internal_error
+from core.error_handler import raise_bad_request, raise_internal_error
 
 
 async def parse_resume_file(file: UploadFile) -> str:

@@ -5,7 +5,7 @@ import random
 from typing import List, Dict, Any, Optional
 import requests
 from bs4 import BeautifulSoup
-from app.utils.logger import logger
+from utils.logger import logger
 
 class NowCoderCrawler:
     """牛客网面经爬虫类"""

@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI
-from app.core.settings import settings
-from app.core.redis_client import redis_client
+from core.config import settings
+from core.redis_client import redis_client
 import hashlib
 import json
 import time
@@ -8,7 +8,7 @@ from typing import Any, List
 from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.runnables import Runnable
 from loguru import logger
-from app.core.monitoring import llm_calls_total, llm_call_duration_seconds
+from core.monitoring import llm_calls_total, llm_call_duration_seconds
 
 
 class CachedLLM(Runnable):

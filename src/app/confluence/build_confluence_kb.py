@@ -9,8 +9,8 @@ from typing import List
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from app.utils.logger import logger
-from app.confluence.confluence_kb import ConfluenceKnowledgeBase
+from utils.logger import logger
+from confluence.confluence_kb import ConfluenceKnowledgeBase
 
 # 配置路径
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))

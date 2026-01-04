@@ -1,9 +1,9 @@
 from sqlmodel import SQLModel, create_engine, Session, select
-from app.core.models import User, ChatSession, ChatMessage
+from .models import User, ChatSession, ChatMessage
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
-from app.core.config import settings  # 导入 settings 对象
+from .config import settings  # 导入 settings 对象
 
 # 1. 数据库设置 (使用 SQLite)
 sqlite_file_name = "database.db"

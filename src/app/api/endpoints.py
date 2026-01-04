@@ -12,31 +12,31 @@
 # from langchain_core.output_parsers import StrOutputParser
 # import json  # 记得导入 json
 
-# from app.chains.rag_chain import ask_knowledge_base
+# from chains.rag_chain import ask_knowledge_base
 # # 确保导入了必要的工具
-# from app.core.stream_manager import init_stream_queue
+# from core.stream_manager import init_stream_queue
 
 # # --- 内部模块导入 ---
 # # 1. 数据库与鉴权
-# from app.core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
-# from app.core.models import User, ChatSession, ChatMessage, UserProfile, ChatRequest, AuthRequest, BlogQueryRequest, \
+# from core.db_auth import get_session, get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
+# from core.models import User, ChatSession, ChatMessage, UserProfile, ChatRequest, AuthRequest, BlogQueryRequest, \
 #     BlogQueryResponse, RAGResponse, TTSRequest
-# from app.core.stream_manager import init_stream_queue
-# from app.graph.workflow import app_graph
+# from core.stream_manager import init_stream_queue
+# from graph.workflow import app_graph
 
 # # 2. Schema 数据模型
-# from app.schemas.interview import JDRequest, InterviewReport
-# from app.services.blog_service import chat_with_blog
+# from schemas.interview import JDRequest, InterviewReport
+# from services.blog_service import chat_with_blog
 
 # # 3. 业务服务逻辑
-# from app.services.interview_service import generate_interview_guide
-# from app.services.memory_service import update_long_term_memory
-# from app.services.mock_service import run_mock_interview_stream
+# from services.interview_service import generate_interview_guide
+# from services.memory_service import update_long_term_memory
+# from services.mock_service import run_mock_interview_stream
 
 # # 4. 核心工具与链
-# from app.core.llm_factory import get_llm
-# from app.utils.file_parser import parse_resume_file
-# from app.chains.resume_extractor import extract_resume_features
+# from core.llm_factory import get_llm
+# from utils.file_parser import parse_resume_file
+# from chains.resume_extractor import extract_resume_features
 
 # # ==========================================
 # # 初始化 Router 与 Security
@@ -350,7 +350,7 @@
 #     ASR: 语音转文字 (适配 SiliconFlow SenseVoiceSmall)
 #     """
 #     from openai import OpenAI
-#     from app.core.config import settings
+#     from core.config import settings
 
 #     # 1. 初始化客户端
 #     # 确保使用的是支持 Audio 的 API Key (如 SiliconFlow)
@@ -390,7 +390,7 @@
 #     TTS: 文字转语音
 #     """
 #     from openai import OpenAI
-#     from app.core.config import settings
+#     from core.config import settings
 
 #     client = OpenAI(
 #         api_key=settings.OPENAI_API_KEY,
@@ -476,7 +476,7 @@
 #             # 运行结束，把最终结果构造成 token 类型发出去
 #             # 注意：这里我们把整个 Report 打包成一个 JSON 字符串发过去
 #             # 前端收到 type='result' 时，直接渲染最终报告
-#             from app.schemas.interview import InterviewReport, JDMetaData
+#             from schemas.interview import InterviewReport, JDMetaData
 
 #             # --- 🟢 核心修复开始 ---
 #             # 1. 处理 Technical Questions

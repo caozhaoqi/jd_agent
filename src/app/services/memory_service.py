@@ -1,7 +1,7 @@
 from loguru import logger
 from sqlmodel import Session, select, delete
-from app.core.models import UserProfile
-from app.chains.memory_extractor import extract_user_profile, UserFact
+from core.models import UserProfile
+from chains.memory_extractor import extract_user_profile, UserFact
 
 
 async def update_long_term_memory(db: Session, user_id: int, chat_history_str: str):

@@ -1,6 +1,6 @@
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from app.core.llm_factory import get_llm
+from core.llm_factory import get_llm
 
 
 def get_interviewer_chain(interview_type: str = "comprehensive"):

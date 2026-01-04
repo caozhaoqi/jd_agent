@@ -1,11 +1,11 @@
 from typing import List, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
-from app.core.graph_state import AgentState
+from core.graph_state import AgentState
 from loguru import logger
 
 # 导入所有节点函数
-from app.graph.nodes import (
+from graph.nodes import (
     jd_parser_node,
     researcher_node,
     tech_lead_node,

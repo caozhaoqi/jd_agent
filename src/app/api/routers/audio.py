@@ -8,15 +8,15 @@ import pyttsx3
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
 from fastapi import APIRouter, UploadFile, File
-from app.core.error_handler import (
+from core.error_handler import (
     raise_bad_request,
     raise_internal_error,
     raise_not_found,
 )
 from fastapi.responses import Response
 from loguru import logger
-from app.core.config import settings
-from app.core.models import TTSRequest
+from core.config import settings
+from core.models import TTSRequest
 
 router = APIRouter()
 
@@ -35,8 +35,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
     支持音频和视频文件输入
     """
     from openai import OpenAI
-    from app.core.config import settings
-    from app.utils.video_utils import extract_audio_from_video_bytes
+    from core.config import settings
+    from utils.video_utils import extract_audio_from_video_bytes
 
     # 1. 初始化客户端
     # 确保使用的是支持 Audio 的 API Key (如 SiliconFlow)

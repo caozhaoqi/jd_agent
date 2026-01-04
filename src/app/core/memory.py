@@ -1,5 +1,5 @@
 from sqlmodel import Session, select
-from app.core.models import ChatMessage, ChatSession
+from core.models import ChatMessage, ChatSession
 
 
 def get_recent_chat_history(db: Session, user_id: int, limit: int = 5) -> list[str]:

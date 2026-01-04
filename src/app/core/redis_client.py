@@ -1,9 +1,9 @@
 import redis
-from app.core.config import settings
+from core.config import settings
 from loguru import logger
 import json
 from typing import Any, Optional
-from app.core.monitoring import (
+from core.monitoring import (
     redis_cache_hits,
     redis_cache_misses,
     redis_commands_total,

@@ -2,23 +2,22 @@
 import asyncio
 from sqlmodel import Session
 
-from app.core.stream_manager import send_data, init_stream_queue, send_done, send_token
-from app.graph.workflow import app_graph
-from app.schemas.interview import InterviewReport, JDRequest, JDMetaData
+from core.stream_manager import send_data, init_stream_queue, send_done, send_token
+from graph.workflow import app_graph
+from schemas.interview import InterviewReport, JDRequest, JDMetaData
 from loguru import logger
 
-from app.services.memory_service import get_user_profile_str
+from services.memory_service import get_user_profile_str
 
 
 async def generate_interview_guide(
-    request: JDRequest, db: Session, user_id: int
+    request: JDRequest, db: Session, user_id: int, thread_id: str
 ) -> InterviewReport:
     logger.info("🚀 [L5 Agent] Starting Multi-Agent Swarm...")
     # 1. 获取记忆
     ltm_profile = get_user_profile_str(db, user_id)
 
-    # 1. 准备初始状态
-    thread_id = f"user_{user_id}_job_{hash(request.jd_text)}"
+    # 1. 准备初始状态（使用传入的thread_id）
     initial_state = {
         "jd_text": request.jd_text,
         "user_id": user_id,
@@ -35,6 +34,11 @@ async def generate_interview_guide(
 
     # ✅ 初始化队列
     queue = init_stream_queue(thread_id=thread_id)
+    
+    # ✅ 设置线程本地存储的 thread_id
+    from core.stream_manager import set_current_thread_id, set_queue_accessor
+    set_current_thread_id(thread_id)
+    set_queue_accessor(lambda: queue)
 
     # ✅ 埋点：发送用户画像，传递thread_id
     tags = [line.strip("- ") for line in ltm_profile.split("\n") if line.strip()]

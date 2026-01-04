@@ -2,7 +2,7 @@ from typing import List
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
-from app.core.llm_factory import get_llm
+from core.llm_factory import get_llm
 from loguru import logger
 
 

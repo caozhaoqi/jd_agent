@@ -23,7 +23,7 @@ export default function Home() {
   const router = useRouter();
 
   // --- Global State from Stores ---
-  const { token, currentSessionId, initializeAuth, logout, fetchSessions } = useSessionStore();
+  const { token, isAuthenticated, isInitializing, currentSessionId, initializeAuth, logout, fetchSessions } = useSessionStore();
   const { messages, isLoading, showStartInterviewBtn, setMessages, resetMessages } = useMessageStore();
 
   // --- Local UI State ---
@@ -54,36 +54,26 @@ export default function Home() {
     initializeAuth();
   }, [initializeAuth]);
 
+  // 修复竞态条件：只在认证状态完全初始化后才进行跳转判断
   useEffect(() => {
-    if (!token) {
-      router.push("/login");
+    if (isInitializing) {
+      console.log("🔐 Home: Authentication still initializing, waiting...");
+      return;
     }
-  }, [token, router]);
+    
+    console.log("🔐 Home: Authentication initialized, isAuthenticated:", isAuthenticated);
+    
+    if (!isAuthenticated) {
+      console.log("🔐 Home: Not authenticated, redirecting to login");
+      router.push("/login");
+    } else {
+      console.log("🔐 Home: Authenticated, staying on home page");
+      // 认证成功时刷新会话列表
+      fetchSessions();
+    }
+  }, [isAuthenticated, isInitializing, router, fetchSessions]);
 
   // --- Event Handlers ---
-
-  const handleLoadSession = async (id: number) => {
-    if (!token) return;
-
-    // 核心修复：将加载逻辑移到这里
-    resetMessages();
-    useSessionStore.getState().setCurrentSessionId(id);
-    setMode('mock');
-
-    try {
-      const res = await fetch(`${API_BASE}/chat/history/messages/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const msgs = await res.json();
-        setMessages(msgs);
-      } else if (res.status === 401) {
-        logout();
-      }
-    } catch (e) {
-      console.error("Failed to fetch messages:", e);
-    }
-  };
 
   const handleModeChange = (newMode: ChatMode | 'rag') => {
     setMode(newMode);
@@ -99,8 +89,7 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-[#f9fafb] text-gray-800 font-sans overflow-hidden">
-      {/* 核心修复：将 handleLoadSession 传递给 Sidebar */}
-      <Sidebar mode={mode as ChatMode} setMode={handleModeChange} onLoadSession={handleLoadSession} />
+      <Sidebar mode={mode as ChatMode} setMode={handleModeChange} />
 
       <div className="flex-1 flex flex-col h-full bg-white min-w-0 relative">
         <div className="h-14 border-b flex items-center justify-between px-4 flex-shrink-0">

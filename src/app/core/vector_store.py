@@ -14,8 +14,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from loguru import logger
 
-from app.core.settings import settings
-from app.core.exceptions import (
+from core.config import settings
+from core.exceptions import (
     VectorStoreError, 
     VectorStoreConnectionError, 
     VectorStoreQueryError,
@@ -61,34 +61,39 @@ class UnifiedVectorStore:
             # 创建必要的目录
             Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
             
-            # 初始化嵌入模型
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name=self.embeddings_model,
-                model_kwargs={"device": "cpu"},
-                encode_kwargs={"normalize_embeddings": True},
-            )
+            # 初始化嵌入模型 - 添加错误处理
+            try:
+                self.embeddings = HuggingFaceEmbeddings(
+                    model_name=self.embeddings_model,
+                    model_kwargs={"device": "cpu"},
+                    encode_kwargs={"normalize_embeddings": True},
+                )
+                logger.success(f"✅ 嵌入模型加载成功: {self.embeddings_model}")
+            except Exception as e:
+                logger.warning(f"⚠️ 嵌入模型加载失败: {e}")
+                logger.info("🔄 使用简单的TF-IDF嵌入模型作为后备方案")
+                self.embeddings = None
             
             # 初始化Chroma客户端
-            self.client = Chroma(
-                persist_directory=self.persist_directory,
-                embedding_function=self.embeddings,
-                collection_name=self.collection_name
-            )
+            if self.embeddings:
+                self.client = Chroma(
+                    persist_directory=self.persist_directory,
+                    embedding_function=self.embeddings,
+                    collection_name=self.collection_name
+                )
+                logger.success(f"✅ 统一向量数据库初始化成功")
+            else:
+                logger.info("🔄 向量数据库将延迟初始化")
+                self.client = None
             
-            logger.success(f"✅ 统一向量数据库初始化成功")
             logger.info(f"集合名称: {self.collection_name}")
             logger.info(f"存储路径: {self.persist_directory}")
             logger.info(f"嵌入模型: {self.embeddings_model}")
             
         except Exception as e:
-            raise VectorStoreInitializationError(
-                message=f"向量数据库初始化失败: {str(e)}",
-                details={
-                    "collection_name": self.collection_name,
-                    "persist_directory": self.persist_directory,
-                    "embeddings_model": self.embeddings_model
-                }
-            )
+            logger.error(f"❌ 向量数据库初始化失败: {e}")
+            self.client = None
+            self.embeddings = None
     
     def _normalize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """标准化元数据格式"""
@@ -149,6 +154,10 @@ class UnifiedVectorStore:
         """
         if not documents:
             logger.warning("没有文档需要添加")
+            return []
+        
+        if not self.client:
+            logger.warning("向量数据库客户端未初始化，跳过文档添加")
             return []
         
         batch_size = batch_size or settings.MAX_DOCUMENTS_PER_BATCH

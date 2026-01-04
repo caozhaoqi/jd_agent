@@ -4,7 +4,7 @@
 """
 
 from typing import Optional, Dict, Any
-from app.schemas.errors import APIException, ErrorCode
+from schemas.errors import APIException, ErrorCode
 from loguru import logger
 
 

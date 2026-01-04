@@ -6,12 +6,12 @@ import json
 import asyncio
 from pydantic import BaseModel, Field  # 导入 Field
 
-from app.api.deps import get_current_user, get_llm, get_session
-from app.schemas.interview import JDRequest
-from app.services.interview_service import generate_interview_guide
-from app.services.memory_service import update_long_term_memory
-from app.core.models import User, ChatSession, ChatMessage
-from app.core.stream_manager import clear_queue
+from api.deps import get_current_user, get_llm, get_session
+from schemas.interview import JDRequest
+from services.interview_service import generate_interview_guide
+from services.memory_service import update_long_term_memory
+from core.models import User, ChatSession, ChatMessage
+from core.stream_manager import clear_queue
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
@@ -35,8 +35,12 @@ async def create_guide(
     """
     thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
 
+    # 初始化队列
+    from core.stream_manager import init_stream_queue
+    init_stream_queue(thread_id=thread_id)
+
     async def generate_and_stream():
-        from app.core.stream_manager import get_stream_queue
+        from core.stream_manager import get_stream_queue
 
         message_queue = asyncio.Queue()
 
@@ -62,7 +66,7 @@ async def create_guide(
 
         async def generate_report():
             try:
-                report = await generate_interview_guide(request, db, user.id)
+                report = await generate_interview_guide(request, db, user.id, thread_id)
                 
                 title = f"{report.meta.company_name} 面试准备" if report.meta.company_name else "岗位 JD 分析"
                 new_session = ChatSession(title=title, user_id=user.id)
@@ -78,7 +82,7 @@ async def create_guide(
                 
                 background_tasks.add_task(update_long_term_memory, db, user.id, f"User上传了JD: {request.jd_text}")
                 
-                from app.core.stream_manager import send_done
+                from core.stream_manager import send_done
                 await send_done(thread_id)
                 return report
             except Exception as e:

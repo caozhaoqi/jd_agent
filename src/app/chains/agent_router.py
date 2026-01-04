@@ -1,5 +1,5 @@
-from app.core.llm_factory import get_llm
-from app.core.tools import search_blog_tool, search_company_tool
+from core.llm_factory import get_llm
+from core.tools import search_blog_tool, search_company_tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 

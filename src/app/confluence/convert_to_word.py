@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from docx import Document
 from docx.shared import Inches
-from app.utils.logger import logger
+from utils.logger import logger
 
 # 配置路径
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))

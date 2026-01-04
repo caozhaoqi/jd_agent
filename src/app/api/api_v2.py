@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routers import auth, resume, chat, interview, audio, rag, webrtc, jd
+from api.routers import auth, resume, chat, interview, audio, rag, webrtc, jd
 
 api_router = APIRouter()
 

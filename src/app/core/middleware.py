@@ -3,9 +3,9 @@ import uuid
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-from app.utils.logger import logger
-from app.schemas import ErrorResponse, ErrorCode
-from app.core.monitoring import (
+from utils.logger import logger
+from schemas import ErrorResponse, ErrorCode
+from core.monitoring import (
     api_requests_total,
     api_request_duration_seconds,
     api_active_connections,

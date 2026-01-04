@@ -3,7 +3,7 @@ import torch
 from typing import List, Dict, Any, Union, Coroutine
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from app.utils.logger import logger
+from utils.logger import logger
 
 # 1. 确定向量库路径
 # 逻辑：当前文件 -> 上级(core) -> 上级(app) -> 上级(src) -> 项目根目录 -> blog_faiss_index

@@ -1,7 +1,7 @@
 from flask import Flask, request, Response, stream_with_context
 from loguru import logger
 
-from app.core.rag_engine import rag_engine
+from core.rag_engine import rag_engine
 import json
 import time
 

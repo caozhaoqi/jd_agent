@@ -1,7 +1,7 @@
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
-from app.core.llm_factory import get_llm
-from app.schemas.interview import JDMetaData
+from core.llm_factory import get_llm
+from schemas.interview import JDMetaData
 
 
 # 异步解析函数

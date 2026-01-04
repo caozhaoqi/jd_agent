@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any
-from app.core.config import settings
+from core.config import settings
 
 
 class ConfluenceConfig:

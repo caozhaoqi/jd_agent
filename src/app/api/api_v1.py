@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routers import (
+from api.routers import (
     auth,
     resume,
     chat,

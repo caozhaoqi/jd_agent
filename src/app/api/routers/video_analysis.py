@@ -6,10 +6,10 @@ from fastapi import APIRouter, UploadFile, File, Form
 from typing import Dict, Any
 import tempfile
 
-from app.utils.video_utils import extract_audio_from_video, list_video_files
+from utils.video_utils import extract_audio_from_video, list_video_files
 from openai import OpenAI
-from app.core.config import settings
-from app.core.error_handler import (
+from core.config import settings
+from core.error_handler import (
     raise_not_found,
     raise_bad_request,
     raise_internal_error,
@@ -56,7 +56,7 @@ def analyze_key_knowledge(text: str) -> Dict[str, Any]:
 
     try:
         response = client.chat.completions.create(
-            model=settings.MODEL_NAME or "gpt-3.5-turbo",
+            model=settings.LLM_MODEL_NAME or "gpt-3.5-turbo",
             messages=[
                 {
                     "role": "system",

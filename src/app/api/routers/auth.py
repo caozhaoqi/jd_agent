@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlmodel import Session, select
-from app.core.db_auth import (
+from core.db_auth import (
     get_session,
     get_password_hash,
     verify_password,
     create_access_token,
     verify_token,
 )
-from app.core.models import User, AuthRequest
-from app.core.error_handler import raise_bad_request, raise_unauthorized
+from core.models import User, AuthRequest
+from core.error_handler import raise_bad_request, raise_unauthorized
 from loguru import logger
 
 # 定义Bearer认证方案

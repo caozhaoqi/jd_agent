@@ -1,19 +1,19 @@
 import json
 import asyncio
 from fastapi import APIRouter, Depends
-from app.core.error_handler import raise_not_found, raise_internal_error
+from core.error_handler import raise_not_found, raise_internal_error
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from loguru import logger
 
-from app.api.deps import get_current_user, get_session
-from app.core.models import User, ChatSession, ChatMessage, ChatRequest
-from app.core.llm_factory import get_llm
-from app.core.stream_manager import init_stream_queue
-from app.core.sse_manager import sse_manager
-from app.chains.rag_chain import ask_knowledge_base
+from api.deps import get_current_user, get_session
+from core.models import User, ChatSession, ChatMessage, ChatRequest
+from core.llm_factory import get_llm
+from core.stream_manager import init_stream_queue
+from core.sse_manager import sse_manager
+from chains.rag_chain import ask_knowledge_base
 
 router = APIRouter()
 

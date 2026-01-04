@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 import requests
 import urllib.parse
 from bs4 import BeautifulSoup
-from app.utils.logger import logger
+from utils.logger import logger
 
 class MaimaiCrawler:
     """脉脉面经爬虫类"""

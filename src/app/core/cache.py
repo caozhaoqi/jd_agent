@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
 
-from app.core.settings import settings
-from app.core.exceptions import CacheError, handle_exceptions
+from core.config import settings
+from core.exceptions import CacheError, handle_exceptions
 
 
 class LocalCache:

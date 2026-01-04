@@ -16,10 +16,10 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
 from loguru import logger
 
-from app.core.settings import settings
-from app.core.vector_store import vector_store, UnifiedVectorStore
-from app.core.cache import search_cache
-from app.core.exceptions import RAGError, RAGRetrievalError, handle_exceptions, ErrorContext
+from core.config import settings
+from core.vector_store import vector_store, UnifiedVectorStore
+from core.cache import search_cache
+from core.exceptions import RAGError, RAGRetrievalError, handle_exceptions, ErrorContext
 
 # 延迟初始化组件
 _rag_chain = None

@@ -3,7 +3,7 @@ import torch
 from typing import List, Dict, Any, Union
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from app.utils.logger import logger
+from utils.logger import logger
 
 # 设置HuggingFace国内镜像
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"

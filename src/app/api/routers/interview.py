@@ -6,14 +6,14 @@ from sqlalchemy.sql.functions import user
 from sqlmodel import Session
 from loguru import logger
 
-from app.api.deps import get_current_user, get_session
-from app.core.models import User, ChatSession, ChatMessage
-from app.schemas import JDRequest, InterviewReport, APIException, ErrorCode
-from app.services.interview_service import generate_interview_guide
-from app.services.memory_service import update_long_term_memory
-from app.services.mock_service import run_mock_interview_stream
-from app.graph.workflow import app_graph
-from app.core.stream_manager import init_stream_queue
+from api.deps import get_current_user, get_session
+from core.models import User, ChatSession, ChatMessage
+from schemas import JDRequest, InterviewReport, APIException, ErrorCode
+from services.interview_service import generate_interview_guide
+from services.memory_service import update_long_term_memory
+from services.mock_service import run_mock_interview_stream
+from graph.workflow import app_graph
+from core.stream_manager import init_stream_queue
 
 router = APIRouter()
 
@@ -35,7 +35,8 @@ async def create_guide(
 ):
     try:
         # 1. 生成报告
-        report = await generate_interview_guide(request, db, user.id)
+        thread_id = f"user_{user.id}_job_{hash(request.jd_text)}"
+        report = await generate_interview_guide(request, db, user.id, thread_id)
 
         # 2. 存库
         try:
@@ -115,7 +116,7 @@ async def stream_generate_guide(
         async def generate_and_stream():
             try:
                 # 初始化 stream_manager 队列
-                from app.core.stream_manager import get_stream_queue, init_stream_queue
+                from core.stream_manager import get_stream_queue, init_stream_queue
 
                 init_stream_queue(thread_id=thread_id)
 
@@ -271,7 +272,7 @@ async def stream_generate_guide(
 
             finally:
                 # 清除队列
-                from app.core.stream_manager import clear_queue
+                from core.stream_manager import clear_queue
 
                 clear_queue(thread_id)
 

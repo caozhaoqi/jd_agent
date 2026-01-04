@@ -97,7 +97,7 @@ def test_settings_config():
     logger.info("🧪 开始测试配置系统...")
     
     try:
-        from app.core.settings import settings
+        from app.core.config import settings
         
         # 测试基本配置
         logger.info(f"📋 项目名称: {settings.PROJECT_NAME}")

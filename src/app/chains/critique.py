@@ -2,9 +2,9 @@ from typing import List
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel
-from app.core.llm_factory import get_llm
-from app.schemas.interview import InterviewQuestion
-from app.utils.logger import logger
+from core.llm_factory import get_llm
+from schemas.interview import InterviewQuestion
+from utils.logger import logger
 
 
 # 辅助模型

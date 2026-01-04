@@ -7,7 +7,8 @@ interface SessionState {
   currentSessionId: number | null;
   token: string | null;
   username: string | null;
-  hasHydrated: boolean; // 防止首屏 token 为空时误跳登录
+  isAuthenticated: boolean; // 是否已认证
+  isInitializing: boolean; // 是否正在初始化认证状态
   fetchSessions: () => Promise<void>;
   setCurrentSessionId: (id: number | null) => void;
   setToken: (token: string | null) => void;
@@ -23,51 +24,99 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   currentSessionId: null,
   token: null,
   username: null,
-  hasHydrated: false, // SSR 及首次渲染均为 false，初始化后再置为 true
+  isAuthenticated: false,
+  isInitializing: true, // 初始状态为正在初始化
 
   fetchSessions: async () => {
     const token = get().token;
-    if (!token) return;
+    if (!token) {
+      console.log("🔐 fetchSessions: No token found");
+      return;
+    }
 
+    console.log("🔐 fetchSessions: Fetching sessions with token");
     try {
       const res = await fetch(`${API_BASE}/chat/history/sessions`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      
       if (res.status === 401) {
+        console.log("🔐 fetchSessions: Token expired, logging out");
         get().logout();
         return;
       }
+      
       if (res.ok) {
         const sessionsData = await res.json();
+        console.log("🔐 fetchSessions: Sessions fetched successfully", sessionsData);
         set({ sessions: sessionsData });
+      } else {
+        console.error("🔐 fetchSessions: Failed to fetch sessions", res.status, res.statusText);
       }
     } catch (e) {
-      console.error("Failed to fetch sessions:", e);
+      console.error("🔐 fetchSessions: Network error", e);
     }
   },
 
-  setCurrentSessionId: (id) => set({ currentSessionId: id }),
+  setCurrentSessionId: (id) => {
+    console.log("🔐 setCurrentSessionId:", id);
+    set({ currentSessionId: id });
+  },
 
-  setToken: (token) => set({ token }),
+  setToken: (token) => {
+    console.log("🔐 setToken: Token", token ? "received" : "cleared");
+    set({ token });
+  },
 
-  setUsername: (username) => set({ username }),
+  setUsername: (username) => {
+    console.log("🔐 setUsername:", username);
+    set({ username });
+  },
 
   initializeAuth: () => {
-    if (!canUseDOM) return;
+    if (!canUseDOM) {
+      console.log("🔐 initializeAuth: Not in browser environment");
+      set({ isInitializing: false });
+      return;
+    }
+    
+    console.log("🔐 initializeAuth: Starting authentication initialization");
     const storedToken = localStorage.getItem("token");
     const storedUsername = localStorage.getItem("username");
+    
+    console.log("🔐 initializeAuth: Stored token exists:", !!storedToken);
+    console.log("🔐 initializeAuth: Stored username exists:", !!storedUsername);
+    
     if (storedToken && storedUsername) {
-      set({ token: storedToken, username: storedUsername, hasHydrated: true });
+      console.log("🔐 initializeAuth: Found stored credentials, setting authenticated state");
+      set({ 
+        token: storedToken, 
+        username: storedUsername, 
+        isAuthenticated: true,
+        isInitializing: false 
+      });
       get().fetchSessions();
     } else {
-      set({ hasHydrated: true });
+      console.log("🔐 initializeAuth: No stored credentials, setting unauthenticated state");
+      set({ 
+        isAuthenticated: false,
+        isInitializing: false 
+      });
     }
   },
 
   logout: () => {
+    console.log("🔐 logout: Logging out user");
     localStorage.removeItem("token");
     localStorage.removeItem("username");
-    set({ token: null, username: null, sessions: [], currentSessionId: null, hasHydrated: true });
+    set({ 
+      token: null, 
+      username: null, 
+      sessions: [], 
+      currentSessionId: null, 
+      isAuthenticated: false,
+      isInitializing: false
+    });
     // 在实际应用中，这里会触发路由跳转到登录页
     window.location.href = '/login';
   },

@@ -1,4 +1,4 @@
-from app.core.llm_factory import get_llm
+from core.llm_factory import get_llm
 
 
 async def run_mock_interview(jd_text):

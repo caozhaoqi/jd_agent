@@ -1,5 +1,8 @@
 import uvicorn
 import os
+import sys
+# 添加当前目录到Python路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from prometheus_client import (
     generate_latest,
     Counter,
@@ -30,14 +33,14 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
 # 导入日志和中间件
-from app.core.middleware import LogMiddleware
-from app.utils.logger import logger
-from app.core.monitoring import start_system_monitor
+from core.middleware import LogMiddleware
+from utils.logger import logger
+from core.monitoring import start_system_monitor
 
 # 🔴 导入路由和数据库初始化函数
-from app.core.db_auth import create_db_and_tables
-from app.api.api_v1 import api_router
-from app.api.api_v2 import api_router as api_router_v2
+from core.db_auth import create_db_and_tables
+from api.api_v1 import api_router
+from api.api_v2 import api_router as api_router_v2
 
 # 加载 .env
 load_dotenv()
@@ -93,7 +96,7 @@ app.add_middleware(LogMiddleware)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """处理请求验证错误，返回统一的错误响应格式"""
-    from app.schemas import ErrorResponse, ErrorCode
+    from schemas import ErrorResponse, ErrorCode
 
     request_id = getattr(request.state, "request_id", "")
 
@@ -111,7 +114,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """处理HTTP异常，包括自定义APIException"""
-    from app.schemas import ErrorResponse, ErrorCode, APIException
+    from schemas import ErrorResponse, ErrorCode, APIException
 
     request_id = getattr(request.state, "request_id", "")
 
@@ -159,7 +162,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """处理所有未捕获的异常"""
-    from app.schemas import ErrorResponse, ErrorCode
+    from schemas import ErrorResponse, ErrorCode
 
     request_id = getattr(request.state, "request_id", "")
 
@@ -185,6 +188,16 @@ async def root():
     }
 
 
+@app.get("/health", tags=["System"])
+async def health_check():
+    """健康检查端点"""
+    return {
+        "status": "healthy",
+        "message": "Service is running normally",
+        "timestamp": str(__import__('datetime').datetime.now())
+    }
+
+
 @app.get("/metrics", tags=["Monitoring"])
 async def metrics():
     """Expose Prometheus metrics"""
@@ -192,4 +205,4 @@ async def metrics():
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True, log_config=None)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_config=None)

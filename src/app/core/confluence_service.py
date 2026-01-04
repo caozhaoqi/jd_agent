@@ -4,7 +4,7 @@ from atlassian import Confluence
 from loguru import logger
 from retry import retry
 
-from app.core.config import settings
+from core.config import settings
 
 
 class ConfluenceService:

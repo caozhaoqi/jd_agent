@@ -4,9 +4,9 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
-from app.core.llm_factory import get_llm
-from app.schemas.interview import InterviewQuestion
-from app.utils.text_utils import clean_json_output  # 导入重构后的函数
+from core.llm_factory import get_llm
+from schemas.interview import InterviewQuestion
+from utils.text_utils import clean_json_output  # 导入重构后的函数
 
 # 辅助模型：用于解析列表
 class QuestionList(BaseModel):

@@ -8,9 +8,9 @@ from typing import List, Dict, Any, Optional
 from langchain.docstore.document import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS, Chroma
-from app.utils.logger import logger
-from app.interview_experience.nowcoder_crawler import NowCoderCrawler
-from app.interview_experience.maimai_crawler import MaimaiCrawler
+from utils.logger import logger
+from interview_experience.nowcoder_crawler import NowCoderCrawler
+from interview_experience.maimai_crawler import MaimaiCrawler
 
 
 class InterviewExperienceRAG:

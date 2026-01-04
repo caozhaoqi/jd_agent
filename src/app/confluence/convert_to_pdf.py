@@ -3,7 +3,7 @@ import json
 import requests
 import pdfkit
 from bs4 import BeautifulSoup
-from app.utils.logger import logger
+from utils.logger import logger
 
 # 配置路径
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -1,7 +1,7 @@
 # app/services/blog_service.py
 
-from app.core.rag_engine import rag_engine
-from app.core.llm_factory import get_llm
+from core.rag_engine import rag_engine
+from core.llm_factory import get_llm
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 

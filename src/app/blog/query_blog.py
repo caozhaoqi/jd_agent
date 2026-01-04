@@ -33,7 +33,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from app.core.llm_factory import get_llm
+from core.llm_factory import get_llm
 
 # 路径配置 (指向生成的向量库文件夹)
 DB_LOAD_PATH = "../../../blog_faiss_index"

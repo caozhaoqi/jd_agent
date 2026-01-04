@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from app.core.error_handler import (
+from core.error_handler import (
     raise_bad_request,
     raise_internal_error,
     raise_not_found,
@@ -8,9 +8,9 @@ from app.core.error_handler import (
 from pydantic import BaseModel
 from typing import List, AsyncGenerator
 import json
-from app.chains.rag_chain import ask_knowledge_base
-from app.core.models import RAGResponse, RAGRequest, User
-from app.api.deps import get_current_user
+from chains.rag_chain import ask_knowledge_base
+from core.models import RAGResponse, RAGRequest, User
+from api.deps import get_current_user
 import asyncio
 
 router = APIRouter()
@@ -41,14 +41,14 @@ async def stream_query_knowledge_base(request: RAGRequest):
     流式RAG接口：基于本地知识库流式回答问题
     """
     try:
-        from app.chains.rag_chain import (
+        from chains.rag_chain import (
             get_rewrite_chain,
             format_docs_with_source,
             extract_sources,
         )
-        from app.chains.rag_chain import compression_retriever, prompt
-        from app.chains.rag_chain import ChatOpenAI
-        from app.core.config import settings
+        from chains.rag_chain import compression_retriever, prompt
+        from chains.rag_chain import ChatOpenAI
+        from core.config import settings
 
         # 1. 查询改写
         rewrite_chain = get_rewrite_chain()
@@ -61,7 +61,7 @@ async def stream_query_knowledge_base(request: RAGRequest):
 
         # 3. 获取流式LLM
         llm = ChatOpenAI(
-            model_name=settings.MODEL_NAME,
+            model_name=settings.LLM_MODEL_NAME,
             openai_api_key=settings.OPENAI_API_KEY,
             openai_api_base=settings.OPENAI_API_BASE,
             temperature=0.1,

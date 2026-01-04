@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, UploadFile, File
 from sqlmodel import Session, select
-from app.api.deps import get_current_user, get_session
-from app.core.models import User, UserProfile, ResumeJDMatchRequest
-from app.utils.file_parser import parse_resume_file
-from app.chains.resume_extractor import extract_resume_features
-from app.chains.resume_jd_matcher import match_resume_with_jd
-from app.core.error_handler import raise_internal_error, raise_bad_request
+from api.deps import get_current_user, get_session
+from core.models import User, UserProfile, ResumeJDMatchRequest
+from utils.file_parser import parse_resume_file
+from chains.resume_extractor import extract_resume_features
+from chains.resume_jd_matcher import match_resume_with_jd
+from core.error_handler import raise_internal_error, raise_bad_request
 from loguru import logger
 
 router = APIRouter()

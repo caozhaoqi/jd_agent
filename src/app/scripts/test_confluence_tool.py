@@ -13,9 +13,9 @@ sys.path.append(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-from app.core.confluence_service import confluence_service
-from app.core.content_processor import content_processor
-from app.core.config import settings
+from core.confluence_service import confluence_service
+from core.content_processor import content_processor
+from core.config import settings
 
 
 def test_confluence_connection():
