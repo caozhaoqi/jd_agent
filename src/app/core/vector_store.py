@@ -233,13 +233,16 @@ class UnifiedVectorStore:
                     normalized_filter[key] = value
             search_params["filter"] = normalized_filter
         
-        # 添加分数阈值
+        # Chroma新版本不支持score_threshold参数，使用k参数控制结果数量
+        # score_threshold在新版本中通过其他方式实现
         if score_threshold:
-            search_params["score_threshold"] = score_threshold
+            logger.warning("当前Chroma版本不支持score_threshold参数，将忽略该参数")
         
         try:
             logger.debug(f"🔍 执行搜索: '{query}', 参数: {search_params}")
             
+            # 移除不支持的score_threshold参数
+            search_params.pop("score_threshold", None)
             docs = self.client.similarity_search(query, **search_params)
             
             logger.info(f"🔍 搜索完成，返回 {len(docs)} 个结果")
@@ -285,12 +288,14 @@ class UnifiedVectorStore:
             search_params["filter"] = normalized_filter
         
         if score_threshold:
-            search_params["score_threshold"] = score_threshold
+            logger.warning("当前Chroma版本不支持score_threshold参数，将忽略该参数")
         
         try:
             logger.debug(f"🔍 执行带分数搜索: '{query}', 参数: {search_params}")
             
-            results = self.client.similarity_search_with_score(query, **search_params)
+            # 移除不支持的score_threshold参数
+            search_params.pop("score_threshold", None)
+            docs = self.client.similarity_search_with_score(query, **search_params)
             
             logger.info(f"🔍 带分数搜索完成，返回 {len(results)} 个结果")
             

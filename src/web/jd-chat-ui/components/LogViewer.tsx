@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { logger } from '@/utils/logger';
 
+const API_BASE = "http://localhost:8000/api/v1";
+
 export type LogFilter = {
   level?: string;
   category?: string;
@@ -110,14 +112,14 @@ export default function LogViewer() {
   const exportServerLogs = async (format: ExportFormat) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/logs/list');
+      const response = await fetch(`${API_BASE}/logs/list`);
       const data = await response.json();
       
       if (data.status === 'success' && data.files && data.files.length > 0) {
         // 获取最新日志文件
         const latestLogFile = data.files[0];
         
-        const downloadResponse = await fetch(`/api/logs/download/${latestLogFile.filename}`);
+        const downloadResponse = await fetch(`${API_BASE}/logs/download/${latestLogFile.filename}`);
         const downloadData = await downloadResponse.json();
         
         if (downloadData.status === 'success') {

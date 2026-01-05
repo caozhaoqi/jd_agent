@@ -23,7 +23,7 @@ try:
 
     print("=== 单个视频完整分析流程测试 ===")
     print(f"使用的ASR模型: {settings.ASR_MODEL}")
-    print(f"使用的LLM模型: {settings.LLM_MODEL_NAME}")
+    print(f"使用的LLM模型: {settings.MODEL_NAME}")
 
     # 测试视频目录
     video_dir = "/Users/Downloads"

@@ -56,7 +56,7 @@ def analyze_key_knowledge(text: str) -> Dict[str, Any]:
 
     try:
         response = client.chat.completions.create(
-            model=settings.LLM_MODEL_NAME or "gpt-3.5-turbo",
+            model=settings.MODEL_NAME or "gpt-3.5-turbo",
             messages=[
                 {
                     "role": "system",

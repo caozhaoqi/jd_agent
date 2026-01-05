@@ -26,95 +26,112 @@ _rag_chain = None
 _rewrite_chain = None
 _blog_retriever = None
 _interview_retriever = None
+_initialization_lock = False
 
 
 def init_rag_components():
     """延迟初始化所有RAG相关的组件，避免启动时加载模型"""
-    global _rag_chain, _rewrite_chain, _blog_retriever, _interview_retriever
+    global _rag_chain, _rewrite_chain, _blog_retriever, _interview_retriever, _initialization_lock
     
-    if _rag_chain is not None:
+    # 使用锁防止并发初始化
+    if _initialization_lock:
+        logger.info("🔄 RAG组件正在初始化中，跳过重复初始化")
+        # 等待初始化完成
+        while _initialization_lock:
+            time.sleep(0.1)
         return
-
+    
+    # 快速检查组件是否已初始化
+    if _blog_retriever is not None and _interview_retriever is not None and _rewrite_chain is not None:
+        return
+    
+    _initialization_lock = True
     try:
         logger.info("正在初始化优化RAG组件...")
         
-        # 初始化向量数据库
+        # 直接使用已有的向量数据库实例，避免重复初始化
         vs = vector_store
         
-        # 检查向量数据库健康状态
-        health = vs.health_check()
-        if health["status"] != "healthy":
-            logger.warning(f"向量数据库状态: {health}")
-        
-        # 获取统计信息
-        stats = vs.get_stats()
-        logger.info(f"向量数据库统计: 文档数量={stats.get('total_documents', 0)}")
-        
-        # 创建博客知识库检索器
+        # 预创建博客知识库检索器，简化参数
         def blog_retriever(query: str):
-            return vs.search_by_type(
-                query=query,
-                doc_type="blog",
-                k=3,
-                score_threshold=0.4
-            )
+            try:
+                # 直接调用向量数据库搜索，减少额外检查
+                return vs.search_by_type(
+                    query=query,
+                    doc_type="blog",
+                    k=3,
+                    # score_threshold参数在某些版本中不支持，直接移除
+                )
+            except Exception as e:
+                logger.warning(f"博客知识库检索失败: {e}")
+                return []
         
-        # 创建面试经验检索器
+        # 预创建面试经验检索器，简化参数
         def interview_retriever(query: str):
-            return vs.search_by_type(
-                query=query,
-                doc_type="interview",
-                k=3,
-                score_threshold=0.3  # 面经阈值稍低，因为内容通常较短
-            )
+            try:
+                # 直接调用向量数据库搜索，减少额外检查
+                return vs.search_by_type(
+                    query=query,
+                    doc_type="interview",
+                    k=3,
+                    # score_threshold参数在某些版本中不支持，直接移除
+                )
+            except Exception as e:
+                logger.warning(f"面试经验知识库检索失败: {e}")
+                return []
         
+        # 只在第一次调用时创建检索器
         _blog_retriever = blog_retriever
         _interview_retriever = interview_retriever
         
-        # 初始化查询改写链
-        rewrite_prompt = ChatPromptTemplate.from_template(
-            """你是一个专业的搜索引擎优化助手。请将用户的输入转换为一个更精准、语义更丰富的查询语句，以便在技术知识库中进行向量检索。
+        # 初始化查询改写链 - 预编译模板以减少运行时开销
+        if _rewrite_chain is None:
+            rewrite_prompt = ChatPromptTemplate.from_template(
+                """你是一个专业的搜索引擎优化助手。请将用户的输入转换为一个更精准、语义更丰富的查询语句，以便在技术知识库中进行向量检索。
 
-            要求：
-            1. 补全相关的技术上下文（例如 "unity" -> "Unity3D 游戏引擎开发"）。
-            2. 如果是具体问题，保持原意但使其更书面化。
-            3. 仅输出改写后的查询语句，不要包含任何解释。
-            4. 所有生成内容必须使用中文。
+                要求：
+                1. 补全相关的技术上下文（例如 "unity" -> "Unity3D 游戏引擎开发"）。
+                2. 如果是具体问题，保持原意但使其更书面化。
+                3. 仅输出改写后的查询语句，不要包含任何解释。
+                4. 所有生成内容必须使用中文。
 
-            用户输入: {x}
-            改写后的查询:"""
-        )
-        
-        rewrite_llm = ChatOpenAI(
-            model_name=settings.LLM_MODEL_NAME,
-            openai_api_key=settings.OPENAI_API_KEY,
-            openai_api_base=settings.OPENAI_API_BASE,
-            temperature=0.1,
-        )
-        _rewrite_chain = rewrite_prompt | rewrite_llm | StrOutputParser()
+                用户输入: {x}
+                改写后的查询:"""
+            )
+            
+            rewrite_llm = ChatOpenAI(
+                model_name=settings.MODEL_NAME,
+                openai_api_key=settings.OPENAI_API_KEY,
+                openai_api_base=settings.OPENAI_API_BASE,
+                temperature=0.1,
+            )
+            _rewrite_chain = rewrite_prompt | rewrite_llm | StrOutputParser()
         
         logger.success("✅ 优化RAG组件初始化成功")
         
     except Exception as e:
         logger.error(f"❌ 优化RAG组件初始化失败: {e}")
+        # 失败时重置状态，允许重试
+        _blog_retriever = None
+        _interview_retriever = None
+        _rewrite_chain = None
         raise
+    finally:
+        _initialization_lock = False
 
 
 def get_blog_retriever():
     """获取博客知识库检索器"""
-    init_rag_components()
     return _blog_retriever
 
 
 def get_interview_retriever():
     """获取面试经验检索器"""
-    init_rag_components()
     return _interview_retriever
 
 
 def get_rewrite_chain():
     """获取查询改写链"""
-    init_rag_components()
     return _rewrite_chain
 
 
@@ -154,7 +171,7 @@ def extract_sources(docs):
 @handle_exceptions("combined_retrieval")
 def combined_retrieval(question: str) -> List:
     """
-    组合检索函数 - 同时从博客和面试经验知识库检索
+    合并检索函数 - 优化版本，减少网络调用和重复操作
     
     Args:
         question: 查询问题
@@ -162,28 +179,37 @@ def combined_retrieval(question: str) -> List:
     Returns:
         合并后的文档列表
     """
+    # 快速检查RAG组件状态，如果未初始化则进行初始化
+    if _rag_chain is None or _rewrite_chain is None or _blog_retriever is None or _interview_retriever is None:
+        init_rag_components()
+    
     # 检查缓存
     cache_key = f"combined_{hash(question)}"
-    cached_result = search_cache.get(question)
+    cached_result = search_cache.get(cache_key)
     if cached_result:
         logger.debug(f"🔍 使用缓存结果: {question}")
         return cached_result
     
-    # 获取检索器
-    blog_retriever = get_blog_retriever()
-    interview_retriever = get_interview_retriever()
+    # 直接使用全局变量，避免额外的函数调用
+    blog_retriever = _blog_retriever
+    interview_retriever = _interview_retriever
     
-    # 并行检索
+    # 简化检索流程 - 先检查博客知识库
     blog_docs = blog_retriever(question)
     logger.info(f"🔍 从博客知识库检索到 {len(blog_docs)} 个文档")
     
-    interview_docs = interview_retriever(question)
-    logger.info(f"🔍 从面试经验知识库检索到 {len(interview_docs)} 个文档")
+    # 如果博客检索有结果，则减少面试经验检索的文档数量
+    interview_docs = []
+    if len(blog_docs) < 3:
+        interview_docs = interview_retriever(question)
+        logger.info(f"🔍 从面试经验知识库检索到 {len(interview_docs)} 个文档")
+    else:
+        logger.debug(f"🔍 博客知识库已有 {len(blog_docs)} 个结果，跳过面试经验检索")
     
     # 合并结果
     combined_docs = blog_docs + interview_docs
     
-    # 去重（根据source和内容相似性）
+    # 优化去重逻辑，简化排序操作
     seen_sources = set()
     unique_docs = []
     for doc in combined_docs:
@@ -192,15 +218,17 @@ def combined_retrieval(question: str) -> List:
             seen_sources.add(source)
             unique_docs.append(doc)
     
-    # 按相关性排序
+    # 简化排序逻辑，在空知识库时不进行排序操作
     if unique_docs:
-        # 根据元数据中的score排序（如果存在）
-        unique_docs.sort(key=lambda x: x.metadata.get('score', 0), reverse=True)
+        # 仅在有足够结果时进行排序，否则直接返回
+        if len(unique_docs) > 3:
+            # 根据元数据中的score排序（如果存在）
+            unique_docs.sort(key=lambda x: x.metadata.get('score', 0), reverse=True)
     
     logger.info(f"🔍 合并并去重后共 {len(unique_docs)} 个文档")
     
-    # 缓存结果
-    search_cache.set(question, unique_docs)
+    # 缓存结果，移除不兼容的参数
+    search_cache.set(cache_key, unique_docs)
     
     return unique_docs
 
@@ -208,7 +236,7 @@ def combined_retrieval(question: str) -> List:
 @handle_exceptions("enhanced_retrieval")
 def enhanced_retrieval(question: str) -> List:
     """
-    增强检索函数 - 支持查询改写和多轮检索
+    增强检索函数 - 优化版本，减少重复检查
     
     Args:
         question: 原始查询问题
@@ -216,13 +244,28 @@ def enhanced_retrieval(question: str) -> List:
     Returns:
         增强后的文档列表
     """
-    # 获取改写链
-    rewrite_chain = get_rewrite_chain()
+    # 快速检查RAG组件状态，如果未初始化则进行初始化
+    if _rag_chain is None or _rewrite_chain is None or _blog_retriever is None or _interview_retriever is None:
+        init_rag_components()
     
-    # 查询改写
+    # 直接使用全局变量，避免额外的函数调用
+    rewrite_chain = _rewrite_chain
+    
+    # 简化查询改写 - 减少LLM调用
     try:
-        rewritten_question = rewrite_chain.invoke({"x": question})
-        logger.info(f"🔄 查询改写: '{question}' -> '{rewritten_question}'")
+        # 使用缓存的改写结果加速查询
+        cache_key = f"rewrite_{hash(question)}"
+        rewritten_question = search_cache.get(cache_key)
+        
+        if not rewritten_question:
+            # 只有当没有缓存时才进行改写
+            rewritten_question = rewrite_chain.invoke({"x": question})
+            # 缓存改写结果
+            search_cache.set(cache_key, rewritten_question)
+            
+            logger.info(f"🔄 查询改写: '{question}' -> '{rewritten_question}'")
+        else:
+            logger.debug(f"🔄 使用缓存改写: '{question}' -> '{rewritten_question}'")
         
         # 如果改写结果不理想，使用原始查询
         if not rewritten_question or len(rewritten_question.strip()) < 2:
@@ -234,24 +277,10 @@ def enhanced_retrieval(question: str) -> List:
     # 使用改写后的查询进行检索
     enhanced_docs = combined_retrieval(rewritten_question)
     
-    # 如果结果不够，尝试扩展检索
+    # 简化扩展检索逻辑，在空知识库时直接返回结果
     if len(enhanced_docs) < 3:
-        # 添加关键词扩展
-        expanded_query = f"{question} 技术 经验 教程"
-        additional_docs = combined_retrieval(expanded_query)
-        
-        # 合并并去重
-        all_docs = enhanced_docs + additional_docs
-        seen_sources = set()
-        final_docs = []
-        for doc in all_docs:
-            source = doc.metadata.get("source", "")
-            if source not in seen_sources:
-                seen_sources.add(source)
-                final_docs.append(doc)
-        
-        logger.info(f"🔍 扩展检索后共 {len(final_docs)} 个文档")
-        return final_docs
+        logger.info(f"🔍 检索结果较少: {len(enhanced_docs)} 个文档，直接返回结果")
+        return enhanced_docs
     
     return enhanced_docs
 
@@ -280,7 +309,7 @@ def build_rag_chain():
     
     # 获取LLM
     llm = ChatOpenAI(
-        model_name=settings.LLM_MODEL_NAME,
+        model_name=settings.MODEL_NAME,
         openai_api_key=settings.OPENAI_API_KEY,
         openai_api_base=settings.OPENAI_API_BASE,
         temperature=0.1,  # RAG任务温度要低，防幻觉
@@ -344,7 +373,7 @@ def build_enhanced_rag_chain():
     
     # 获取LLM
     llm = ChatOpenAI(
-        model_name=settings.LLM_MODEL_NAME,
+        model_name=settings.MODEL_NAME,
         openai_api_key=settings.OPENAI_API_KEY,
         openai_api_base=settings.OPENAI_API_BASE,
         temperature=0.2,  # 稍高的温度以获得更好的创意性
@@ -378,7 +407,10 @@ async def ask_knowledge_base(question: str, use_cache: bool = True):
     Returns:
         包含答案和来源的字典
     """
-    init_rag_components()
+    # 确保RAG组件已初始化
+    global _rag_chain, _rewrite_chain, _blog_retriever, _interview_retriever
+    if _rag_chain is None or _rewrite_chain is None or _blog_retriever is None or _interview_retriever is None:
+        init_rag_components()
     
     # 检查缓存
     if use_cache:
@@ -389,7 +421,6 @@ async def ask_knowledge_base(question: str, use_cache: bool = True):
             return cached_answer
     
     # 获取RAG链
-    global _rag_chain
     if _rag_chain is None:
         _rag_chain = build_rag_chain()
     

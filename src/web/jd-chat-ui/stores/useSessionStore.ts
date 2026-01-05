@@ -74,30 +74,40 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   initializeAuth: () => {
+    console.log("🔐 initializeAuth: Starting authentication initialization");
+    
+    // 确保在浏览器环境中运行
     if (!canUseDOM) {
-      console.log("🔐 initializeAuth: Not in browser environment");
+      console.log("🔐 initializeAuth: Not in browser environment, skipping initialization");
       set({ isInitializing: false });
       return;
     }
     
-    console.log("🔐 initializeAuth: Starting authentication initialization");
-    const storedToken = localStorage.getItem("token");
-    const storedUsername = localStorage.getItem("username");
-    
-    console.log("🔐 initializeAuth: Stored token exists:", !!storedToken);
-    console.log("🔐 initializeAuth: Stored username exists:", !!storedUsername);
-    
-    if (storedToken && storedUsername) {
-      console.log("🔐 initializeAuth: Found stored credentials, setting authenticated state");
-      set({ 
-        token: storedToken, 
-        username: storedUsername, 
-        isAuthenticated: true,
-        isInitializing: false 
-      });
-      get().fetchSessions();
-    } else {
-      console.log("🔐 initializeAuth: No stored credentials, setting unauthenticated state");
+    try {
+      const storedToken = localStorage.getItem("token");
+      const storedUsername = localStorage.getItem("username");
+      
+      console.log("🔐 initializeAuth: Stored token exists:", !!storedToken);
+      console.log("🔐 initializeAuth: Stored username exists:", !!storedUsername);
+      
+      if (storedToken && storedUsername) {
+        console.log("🔐 initializeAuth: Found stored credentials, setting authenticated state");
+        set({ 
+          token: storedToken, 
+          username: storedUsername, 
+          isAuthenticated: true,
+          isInitializing: false 
+        });
+        get().fetchSessions();
+      } else {
+        console.log("🔐 initializeAuth: No stored credentials, setting unauthenticated state");
+        set({ 
+          isAuthenticated: false,
+          isInitializing: false 
+        });
+      }
+    } catch (error) {
+      console.error("🔐 initializeAuth: Error accessing localStorage:", error);
       set({ 
         isAuthenticated: false,
         isInitializing: false 

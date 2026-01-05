@@ -2,6 +2,8 @@
 import log from 'loglevel';
 import { saveAs } from 'file-saver';
 
+const API_BASE = "http://localhost:8000/api/v1";
+
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
 export type LogCategory = 'stream' | 'auth' | 'ui' | 'network' | 'state' | 'component' | 'general';
 
@@ -70,7 +72,7 @@ class FileLogger {
       
       this.lastAutoSaveTime = currentTime;
       
-      const response = await fetch('/api/logs/save', {
+      const response = await fetch(`${API_BASE}/logs/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

@@ -19,7 +19,13 @@ interface LogEntry {
 class DebugLogger {
   private logs: LogEntry[] = [];
   private maxLogs = 1000;
-  private enabled = process.env.NODE_ENV === 'development' || localStorage.getItem('DEBUG_MODE') === 'true';
+  private enabled: boolean;
+
+  constructor() {
+    // 安全地检查调试模式，避免SSR错误
+    this.enabled = process.env.NODE_ENV === 'development' || 
+      (typeof window !== 'undefined' && localStorage.getItem('DEBUG_MODE') === 'true');
+  }
 
   private addLog(
     level: LogLevel,
@@ -201,6 +207,8 @@ class DebugLogger {
   // 保存到localStorage（持久化）
   saveToLocalStorage() {
     try {
+      if (typeof window === 'undefined') return; // SSR安全检查
+      
       const logsData = {
         timestamp: Date.now(),
         logs: this.logs
@@ -215,6 +223,8 @@ class DebugLogger {
   // 从localStorage加载
   loadFromLocalStorage() {
     try {
+      if (typeof window === 'undefined') return; // SSR安全检查
+      
       const savedData = localStorage.getItem('debug_logs');
       if (savedData) {
         const parsed = JSON.parse(savedData);
@@ -228,14 +238,18 @@ class DebugLogger {
   // 清除日志
   clearLogs() {
     this.logs = [];
-    localStorage.removeItem('debug_logs');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('debug_logs');
+    }
     this.info('ui', '🗑️ 调试日志已清除');
   }
 
   // 清除日志
   clear() {
     this.logs = [];
-    localStorage.removeItem('debug_logs');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('debug_logs');
+    }
     this.info('ui', '🗑️ 调试日志已清除');
   }
 
@@ -292,7 +306,9 @@ class DebugLogger {
   // 启用/禁用调试模式
   setEnabled(enabled: boolean) {
     this.enabled = enabled;
-    localStorage.setItem('DEBUG_MODE', enabled.toString());
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('DEBUG_MODE', enabled.toString());
+    }
   }
 }
 

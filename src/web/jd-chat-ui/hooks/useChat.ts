@@ -130,20 +130,24 @@ export function useChatStream({
               console.log("📄 [Stream Reader] 解析数据行", {
                 lineLength: line.length,
                 dataStrLength: dataStr.length,
-                dataStrPreview: dataStr.substring(0, 200),
+                dataStrPreview: dataStr ? dataStr.substring(0, 200) : 'empty_or_null',
                 isDoneSignal: dataStr === "[DONE]",
-                isJson: dataStr.startsWith('{')
+                isJson: dataStr ? dataStr.startsWith('{') : false
               });
 
-              if (dataStr === "[DONE]") {
-                console.log("🏁 [Stream Reader] 收到结束信号 [DONE]", {
+              // 处理RAG结束信号
+              if (dataStr === "[DONE]" || dataStr === '{"type": "end"}') {
+                console.log("🏁 [Stream Reader] 收到结束信号", {
+                  signalType: dataStr,
                   totalProcessedChunks: chunksProcessed,
                   totalBytes: totalBytesReceived
                 });
-                streamIncoming("done_signal", {}, currentSessionId?.toString());
+                streamIncoming("end_signal", {}, currentSessionId?.toString());
                 updateLastMessage(msg => ({ ...msg, isThinkingFinished: true }));
                 return;
               }
+              
+              // 跳过空数据行
               if (!dataStr) {
                 console.log("⏭️ [Stream Reader] 跳过空数据行");
                 continue;
@@ -359,29 +363,43 @@ export function useChatStream({
                 }
 
               } catch (parseError) {
+                // 增强的JSON解析错误处理
+                let safeDataStr = '';
+                let isJSONFormat = false;
+                let dataStrLength = 0;
+                
+                try {
+                  safeDataStr = typeof dataStr === 'string' ? dataStr : String(dataStr);
+                  isJSONFormat = safeDataStr.startsWith('{');
+                  dataStrLength = safeDataStr.length;
+                } catch (typeError) {
+                  console.warn("⚠️ [Type Check Error] 类型检查失败:", typeError);
+                  safeDataStr = '类型检查失败';
+                }
+                
                 console.warn("⚠️ [JSON Parse Error] JSON解析错误", {
                   errorMessage: parseError instanceof Error ? parseError.message : 'Unknown error',
-                  rawData: dataStr.substring(0, 200),
-                  dataStrLength: dataStr.length,
-                  startsWithBrace: dataStr.startsWith('{'),
+                  rawData: safeDataStr.substring(0, 200),
+                  dataStrLength: dataStrLength,
+                  startsWithBrace: isJSONFormat,
                   sessionId: currentSessionId
                 });
                 
                 streamError(`JSON解析失败: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`, currentSessionId?.toString());
                 
                 // 如果 JSON 解析失败，尝试作为普通文本处理
-                if (dataStr && !dataStr.startsWith("{")) {
+                if (safeDataStr && !safeDataStr.startsWith("{")) {
                   console.log("📝 [Fallback] 作为普通文本处理", {
-                    fallbackText: dataStr.substring(0, 100),
+                    fallbackText: safeDataStr.substring(0, 100),
                     willAppendToContent: true
                   });
                   
                   updateLastMessage(msg => {
-                    const newContent = msg.content + dataStr;
+                    const newContent = msg.content + safeDataStr;
                     console.log("📝 [Fallback Update] 更新消息内容", {
                       oldContentLength: msg.content?.length || 0,
                       newContentLength: newContent.length,
-                      addedText: dataStr.substring(0, 50)
+                      addedText: safeDataStr.substring(0, 50)
                     });
                     
                     return {
@@ -390,15 +408,27 @@ export function useChatStream({
                     };
                   });
                 } else {
-                  console.error("🚨 [JSON Parse Error] 无法解析的数据格式", {
-                    dataStrPreview: dataStr.substring(0, 100),
-                    isJSONFormat: dataStr.startsWith('{')
-                  });
+                  // 增强的错误日志处理，避免任何可能的错误
+                  try {
+                    console.error("🚨 [JSON Parse Error] 无法解析的数据格式", {
+                      dataStrPreview: typeof dataStr === 'string' ? dataStr.substring(0, 100) : String(dataStr),
+                      isJSONFormat: typeof dataStr === 'string' ? dataStr.startsWith('{') : false,
+                      dataStrLength: typeof dataStr === 'string' ? dataStr.length : 0,
+                      dataStrType: typeof dataStr,
+                      actualData: dataStr,
+                      isEmptyString: dataStr === '',
+                      isEmptyObject: dataStr === '{}'
+                    });
+                  } catch (logError) {
+                    // 如果日志记录本身出错，使用最基本的错误信息
+                    console.error("🚨 [JSON Parse Error] 日志记录失败:", logError);
+                  }
                 }
               }
             }
           }
         } catch (readError) {
+
           reconnectAttempts++;
           console.error(`❌ [Stream Read Error] 流读取错误`, {
             attemptNumber: reconnectAttempts,
@@ -512,9 +542,9 @@ export function useChatStream({
       // 路由逻辑
       console.log("🚀 [Frontend] Sending request:", { mode, currentSessionId });
       if (mode === 'rag') {
-        url = `${API_BASE}/qa/qa`;
+        url = `${API_BASE}/qa/qa/stream`;  // 使用流式RAG端点
         body = { question: text };
-        console.log("🚀 [Frontend] Using RAG endpoint:", url);
+        console.log("🚀 [Frontend] Using RAG stream endpoint:", url);
       } else if (currentSessionId) {
         url = `${API_BASE}/chat/stream`;
         body = { session_id: currentSessionId, content: text };

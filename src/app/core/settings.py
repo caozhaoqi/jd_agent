@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # OpenAI配置（可选，支持多种LLM提供商）
     OPENAI_API_KEY: str = ""
     OPENAI_API_BASE: str = "https://api.openai.com/v1"
-    LLM_MODEL_NAME: str = "gpt-3.5-turbo"
+    MODEL_NAME: str = "gpt-3.5-turbo"
     MODEL_MAX_TOKENS: int = 1000
     MODEL_TEMPERATURE: float = 0.1
     
