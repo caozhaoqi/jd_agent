@@ -10,6 +10,72 @@ from datetime import datetime
 from sqlmodel import Field, SQLModel, Relationship
 
 
+from typing import List, Optional
+from datetime import datetime
+from sqlmodel import Field, SQLModel, Relationship, Enum
+import enum
+
+
+class TeamRole(str, enum.Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+    VIEWER = "viewer"
+
+
+class InvitationStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
+class Team(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    description: Optional[str] = None
+    owner_id: int = Field(foreign_key="user.id")
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    members: List["TeamMember"] = Relationship(back_populates="team")
+    invitations: List["TeamInvitation"] = Relationship(back_populates="team")
+    interviews: List["TeamInterview"] = Relationship(back_populates="team")
+
+
+class TeamMember(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    team_id: int = Field(foreign_key="team.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    role: TeamRole = TeamRole.MEMBER
+    joined_at: datetime = Field(default_factory=datetime.now)
+    team: Optional[Team] = Relationship(back_populates="members")
+
+
+class TeamInvitation(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    team_id: int = Field(foreign_key="team.id", index=True)
+    email: str
+    role: TeamRole = TeamRole.MEMBER
+    status: InvitationStatus = InvitationStatus.PENDING
+    invited_by: int = Field(foreign_key="user.id")
+    created_at: datetime = Field(default_factory=datetime.now)
+    expires_at: datetime
+    team: Optional[Team] = Relationship(back_populates="invitations")
+
+
+class TeamInterview(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    team_id: int = Field(foreign_key="team.id", index=True)
+    title: str
+    candidate_name: Optional[str] = None
+    position: Optional[str] = None
+    status: str = "pending"
+    created_by: int = Field(foreign_key="user.id")
+    created_at: datetime = Field(default_factory=datetime.now)
+    completed_at: Optional[datetime] = None
+    team: Optional[Team] = Relationship(back_populates="interviews")
+
+
 class UserProfile(SQLModel, table=True):
     """
     长期记忆表：存储用户的关键画像信息
@@ -17,12 +83,9 @@ class UserProfile(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
-    category: str  # 类别，如: "tech_stack", "experience", "preference"
-    content: str  # 内容，如: "精通 Python", "5年架构经验", "不接受外包"
+    category: str
+    content: str
     updated_at: datetime = Field(default_factory=datetime.now)
-
-    # 建立与 User 的关联 (需要在 User 类里也加对应的 relationship)
-    # user: Optional[User] = Relationship(back_populates="profiles")
 
 
 # --- 数据库模型 ---

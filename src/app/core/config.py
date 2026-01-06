@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     # 如果使用 DeepSeek，这里需要改为: https://api.deepseek.com
     OPENAI_API_BASE: str = "https://api.openai.com/v1"
 
+    # --- Anthropic 模型配置 ---
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_MODEL: str = "claude-3-sonnet-20240229"
+
+    # --- DeepSeek 模型配置 ---
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_API_BASE: str = "https://api.deepseek.com/v1"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+
     # 模型名称: gpt-3.5-turbo, gpt-4, deepseek-chat 等
     MODEL_NAME: str = "gpt-3.5-turbo"
 

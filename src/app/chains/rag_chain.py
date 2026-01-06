@@ -4,6 +4,7 @@
 """
 
 import os
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -20,6 +21,7 @@ from core.config import settings
 from core.vector_store import vector_store, UnifiedVectorStore
 from core.cache import search_cache
 from core.exceptions import RAGError, RAGRetrievalError, handle_exceptions, ErrorContext
+from core.query_cache import QueryCache
 
 # 延迟初始化组件
 _rag_chain = None
@@ -27,6 +29,7 @@ _rewrite_chain = None
 _blog_retriever = None
 _interview_retriever = None
 _initialization_lock = False
+_query_cache = None  # 添加智能查询缓存实例
 
 
 def init_rag_components():
@@ -130,8 +133,18 @@ def get_interview_retriever():
     return _interview_retriever
 
 
+def get_query_cache():
+    """获取智能查询缓存实例"""
+    global _query_cache
+    if _query_cache is None:
+        _query_cache = QueryCache()
+    return _query_cache
+
 def get_rewrite_chain():
-    """获取查询改写链"""
+    """获取查询改写链实例"""
+    global _rewrite_chain
+    if _rewrite_chain is None:
+        init_rag_components()
     return _rewrite_chain
 
 
@@ -236,7 +249,7 @@ def combined_retrieval(question: str) -> List:
 @handle_exceptions("enhanced_retrieval")
 def enhanced_retrieval(question: str) -> List:
     """
-    增强检索函数 - 优化版本，减少重复检查
+    增强检索函数 - 使用智能查询缓存系统
     
     Args:
         question: 原始查询问题
@@ -244,6 +257,15 @@ def enhanced_retrieval(question: str) -> List:
     Returns:
         增强后的文档列表
     """
+    # 获取智能查询缓存实例
+    cache = get_query_cache()
+    
+    # 尝试从智能查询缓存中获取结果
+    cached_result = cache.get(question)
+    if cached_result:
+        logger.info(f"🔄 智能缓存命中: '{question[:50]}...'")
+        return cached_result.get("docs", [])
+    
     # 快速检查RAG组件状态，如果未初始化则进行初始化
     if _rag_chain is None or _rewrite_chain is None or _blog_retriever is None or _interview_retriever is None:
         init_rag_components()
@@ -276,6 +298,13 @@ def enhanced_retrieval(question: str) -> List:
     
     # 使用改写后的查询进行检索
     enhanced_docs = combined_retrieval(rewritten_question)
+    
+    # 将检索结果存储到智能查询缓存中
+    cache_result = {
+        "docs": enhanced_docs,
+        "timestamp": time.time()
+    }
+    cache.set(question, cache_result)
     
     # 简化扩展检索逻辑，在空知识库时直接返回结果
     if len(enhanced_docs) < 3:

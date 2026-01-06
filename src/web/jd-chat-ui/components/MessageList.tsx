@@ -6,19 +6,27 @@ import { Bot, User, Loader2, Play } from "lucide-react";
 import clsx from "clsx";
 import { Message } from "@/types/chat";
 import ThinkingReveal from "./ThinkingReveal";
+import LoadingIndicator, { LoadingType } from "./LoadingIndicator";  // 添加加载状态指示器
+import ErrorAlert from "./ErrorAlert";  // 添加错误提示组件
 
 interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
+  loadingType?: LoadingType;  // 添加加载状态类型
+  error?: string | null;  // 添加错误信息
   showStartInterviewBtn?: boolean;
   onStartMockInterview?: () => void;
+  onRetry?: () => void;  // 添加重试回调
 }
 
 export default function MessageList({
   messages,
   isLoading,
+  loadingType,
+  error,
   showStartInterviewBtn,
-  onStartMockInterview
+  onStartMockInterview,
+  onRetry
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -86,11 +94,25 @@ useEffect(() => {
           </div>
         ))}
 
+        {/* 错误提示区域 - 使用新的ErrorAlert组件 */}
+        {error && (
+          <ErrorAlert
+            error={error}
+            onRetry={onRetry}
+            type="inline"
+            autoHide={false}
+            showDetails={false}
+          />
+        )}
+
         {/* 居中大 Loader：仅在 AI 还没出现在列表中时显示 */}
         {shouldShowGlobalLoader && (
           <div className="flex flex-col items-center justify-center gap-3 py-10 text-blue-500 animate-in fade-in zoom-in-95 duration-300">
-            <Loader2 className="animate-spin" size={32} />
-            <span className="text-sm font-medium tracking-tight">AI 正在处理请求...</span>
+            <LoadingIndicator 
+              type={loadingType || 'default'} 
+              size="large" 
+              message="AI 正在处理请求..." 
+            />
           </div>
         )}
 

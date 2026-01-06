@@ -408,20 +408,47 @@ export function useChatStream({
                     };
                   });
                 } else {
-                  // 增强的错误日志处理，避免任何可能的错误
+                  // 超级安全的错误日志处理
                   try {
-                    console.error("🚨 [JSON Parse Error] 无法解析的数据格式", {
-                      dataStrPreview: typeof dataStr === 'string' ? dataStr.substring(0, 100) : String(dataStr),
+                    // 先进行最基本的安全检查
+                    let safeDataStr = 'unknown';
+                    let safeType = typeof dataStr;
+                    
+                    try {
+                      if (typeof dataStr === 'string') {
+                        safeDataStr = dataStr.substring(0, 100);
+                      } else if (dataStr === null) {
+                        safeDataStr = 'null';
+                      } else if (dataStr === undefined) {
+                        safeDataStr = 'undefined';
+                      } else if (typeof dataStr === 'object' && dataStr !== null) {
+                        const objectName = (dataStr as any).constructor?.name || 'Object';
+                        safeDataStr = '[object ' + objectName + ']';
+                      } else {
+                        safeDataStr = String(dataStr);
+                      }
+                    } catch (strError) {
+                      safeDataStr = '[string conversion failed]';
+                    }
+                    
+                    // 构建安全的日志对象
+                    const logData = {
+                      dataStrPreview: safeDataStr,
                       isJSONFormat: typeof dataStr === 'string' ? dataStr.startsWith('{') : false,
                       dataStrLength: typeof dataStr === 'string' ? dataStr.length : 0,
-                      dataStrType: typeof dataStr,
-                      actualData: dataStr,
+                      dataStrType: safeType,
                       isEmptyString: dataStr === '',
-                      isEmptyObject: dataStr === '{}'
-                    });
+                      isEmptyObject: safeDataStr === '[object Object]'
+                    };
+                    
+                    console.error("🚨 [JSON Parse Error] 无法解析的数据格式", logData);
                   } catch (logError) {
-                    // 如果日志记录本身出错，使用最基本的错误信息
-                    console.error("🚨 [JSON Parse Error] 日志记录失败:", logError);
+                    // 最基本的错误日志，防止任何错误
+                    try {
+                      console.error("🚨 [JSON Parse Error] 数据解析失败");
+                    } catch (basicError) {
+                      // 如果连基本日志都失败，就什么都不做
+                    }
                   }
                 }
               }

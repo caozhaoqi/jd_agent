@@ -1,14 +1,21 @@
 from sqlmodel import SQLModel, create_engine, Session, select
 from .models import User, ChatSession, ChatMessage
+from models.interview_report import InterviewReportExport
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
-from .config import settings  # 导入 settings 对象
+from typing import AsyncGenerator
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from .config import settings
 
-# 1. 数据库设置 (使用 SQLite)
 sqlite_file_name = "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
+async_sqlite_url = f"sqlite+aiosqlite:///{sqlite_file_name}"
+
 engine = create_engine(sqlite_url)
+async_engine = create_async_engine(async_sqlite_url)
+async_session_maker = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 def create_db_and_tables():
@@ -18,6 +25,27 @@ def create_db_and_tables():
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+@asynccontextmanager
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def get_db_dependency() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 # 2. 密码加密工具

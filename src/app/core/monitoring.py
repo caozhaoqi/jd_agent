@@ -36,6 +36,21 @@ redis_commands_total = Counter(
 )
 
 
+# --- 查询缓存监控指标 ---
+# 查询缓存命中
+cache_hits = Counter("cache_hits", "Cache hits")
+# 查询缓存未命中
+cache_misses = Counter("cache_misses", "Cache misses")
+# 查询缓存总数
+cache_queries_total = Counter("cache_queries_total", "Total cache queries")
+# 相似查询命中
+similar_cache_hits = Counter("similar_cache_hits", "Similar cache hits")
+# 查询缓存延迟
+cache_operation_duration_seconds = Histogram(
+    "cache_operation_duration_seconds", "Cache operation duration in seconds", ["operation"]
+)
+
+
 # --- LLM 监控指标 ---
 # LLM 调用计数
 llm_calls_total = Counter(
