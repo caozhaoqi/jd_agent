@@ -4,7 +4,7 @@ import { useMessageStore } from "@/stores/useMessageStore";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
 import { ChatMode } from "@/types/chat";
-import { debugLogger, streamIncoming, streamOutgoing, streamError, stateUpdate } from "@/utils/debugLogger";
+import { logger } from "@/utils/logger";
 
 export const API_BASE = "http://localhost:8000/api/v1";
 
@@ -64,8 +64,7 @@ export function useChatStream({
     });
     
     if (!res.body) {
-      console.error("❌ [Stream Reader] No response body received");
-      streamError("No response body", currentSessionId?.toString());
+      logger.error('stream', 'No response body received');
       setIsLoading(false);
       return;
     }
@@ -105,11 +104,7 @@ export function useChatStream({
 
           // 【核心修复】只要有数据流到达，立即关闭全局 Loading 状态
           if (!hasReceivedData) {
-            console.log("✅ [Stream Reader] 第一个数据块到达，关闭全局加载器", {
-              firstChunkSize: value?.length,
-              timeToFirstByte: Date.now()
-            });
-            streamIncoming("first_chunk", { chunkSize: value?.length }, currentSessionId?.toString());
+            logger.debug('stream', '第一个数据块到达，关闭全局加载器');
             setIsLoading(false);
             hasReceivedData = true;
           }
@@ -137,94 +132,38 @@ export function useChatStream({
 
               // 处理RAG结束信号
               if (dataStr === "[DONE]" || dataStr === '{"type": "end"}') {
-                console.log("🏁 [Stream Reader] 收到结束信号", {
-                  signalType: dataStr,
-                  totalProcessedChunks: chunksProcessed,
-                  totalBytes: totalBytesReceived
-                });
-                streamIncoming("end_signal", {}, currentSessionId?.toString());
+                logger.debug('stream', '收到结束信号');
                 updateLastMessage(msg => ({ ...msg, isThinkingFinished: true }));
                 return;
               }
               
               // 跳过空数据行
               if (!dataStr) {
-                console.log("⏭️ [Stream Reader] 跳过空数据行");
+                logger.debug('stream', '跳过空数据行');
                 continue;
               }
 
               try {
                 const payload = JSON.parse(dataStr);
-                console.log("🧩 [Stream Reader] 解析JSON载荷", {
-                  payloadType: payload.type,
-                  hasContent: !!payload.content,
-                  contentType: typeof payload.content,
-                  contentLength: payload.content?.length || 0,
-                  payloadKeys: Object.keys(payload)
-                });
+                logger.debug('stream', `解析JSON载荷: ${payload.type}`);
 
                 // 1. 处理结构化监控数据
                 if (payload.type === 'data') {
-                  console.log("🎯 [Dashboard Data] 接收监控数据", {
-                    key: payload.key,
-                    valueType: typeof payload.value,
-                    valuePreview: String(payload.value).substring(0, 100),
-                    sessionId: currentSessionId
-                  });
-                  streamIncoming("dashboard_data", { 
-                    key: payload.key, 
-                    valueType: typeof payload.value 
-                  }, currentSessionId?.toString());
+                  logger.debug('stream', `接收监控数据: ${payload.key}`);
                   onDashboardUpdate(payload.key, payload.value);
                 }
 
                 // 2. 处理思考内容 (DeepSeek 风格)
                 else if (payload.type === 'thought') {
-                  console.log("� [Thought Process] 接收到思考过程", {
-                    contentLength: payload.content?.length || 0,
-                    contentPreview: payload.content?.substring(0, 100),
-                    detail: payload.detail,
-                    sessionId: currentSessionId,
-                    timestamp: new Date().toISOString()
-                  });
-                  streamIncoming("thought", { 
-                    contentLength: payload.content?.length, 
-                    detail: payload.detail 
-                  }, currentSessionId?.toString());
+                  logger.debug('stream', `思考内容: ${payload.content?.length || 0} chars`);
                   
                   updateLastMessage(msg => {
-                    const oldThoughts = msg.thoughts || [];
-                    const newThoughts = [...oldThoughts, payload.content];
-                    
-                    console.log("🧠 [Message Update] 更新思考数组", {
-                      oldThoughtsCount: oldThoughts.length,
-                      newThoughtsCount: newThoughts.length,
-                      thoughtContent: payload.content?.substring(0, 100),
-                      isFirstThought: oldThoughts.length === 0,
-                      sessionId: currentSessionId
-                    });
-                    
-                    stateUpdate("messageStore", "addThought", { 
-                      thoughtIndex: newThoughts.length - 1,
-                      contentLength: payload.content?.length,
-                      isFirst: oldThoughts.length === 0
-                    });
-                    
                     const updatedMsg = {
                       ...msg,
-                      // 只要开始有思考，就关闭 isLoading（双重保障）
                       isLoading: false,
-                      thoughts: newThoughts,
+                      thoughts: [...(msg.thoughts || []), payload.content],
                       isThinkingFinished: false,
                     };
-                    
-                    console.log("📝 [Message Update] 更新后的消息对象", {
-                      messageIndex: 'last',
-                      isLoading: updatedMsg.isLoading,
-                      thoughtsCount: updatedMsg.thoughts?.length,
-                      isThinkingFinished: updatedMsg.isThinkingFinished,
-                      contentPreview: updatedMsg.content?.substring(0, 50)
-                    });
                     return updatedMsg;
                   });
                 }
@@ -279,35 +218,12 @@ export function useChatStream({
                 // 4. 处理普通正文 Token
                 else if (payload.type === 'token') {
                   const tokenContent = payload.content || "";
-                  console.log("🔤 [Token Processing] 接收正文令牌", {
-                    tokenLength: tokenContent.length,
-                    tokenPreview: tokenContent.substring(0, 100),
-                    sessionId: currentSessionId,
-                    timestamp: new Date().toISOString(),
-                    hasTTS: isTTSRef.current
-                  });
-                  
-                  streamIncoming("token", { 
-                    tokenLength: tokenContent.length,
-                    isTTSEnabled: isTTSRef.current
-                  }, currentSessionId?.toString());
+                  logger.debug('stream', `Token: ${tokenContent.length} chars`);
                   
                   updateLastMessage(msg => {
-                    const oldContent = msg.content || "";
-                    const newContent = oldContent + tokenContent;
-                    
-                    console.log("📝 [Token Update] 更新消息内容", {
-                      oldContentLength: oldContent.length,
-                      newContentLength: newContent.length,
-                      addedLength: tokenContent.length,
-                      contentPreview: tokenContent.substring(0, 50),
-                      willFinishThinking: true
-                    });
-                    
                     return {
                       ...msg,
-                      content: newContent,
-                      // 一旦开始输出正式内容，思考标记为结束
+                      content: (msg.content || "") + tokenContent,
                       isThinkingFinished: true
                     };
                   });
@@ -317,17 +233,8 @@ export function useChatStream({
                     const sentenceEndRegex = /[。！？\.\!\?\:\n]/;
                     const isSentenceEnd = sentenceEndRegex.test(tokenContent);
                     
-                    console.log("🔊 [TTS Queue] 处理TTS队列", {
-                      bufferLength: bufferText.length,
-                      isSentenceEnd,
-                      sentenceEndChar: tokenContent.match(sentenceEndRegex)?.[0] || 'none'
-                    });
-                    
                     if (isSentenceEnd) {
-                      console.log("🎵 [TTS Queue] 添加到语音队列", {
-                        textToSpeak: bufferText.substring(0, 100),
-                        textLength: bufferText.length
-                      });
+                      logger.debug('stream', `TTS添加到队列: ${bufferText.length} chars`);
                       addToQueue(bufferText);
                       bufferText = "";
                     }
@@ -336,23 +243,10 @@ export function useChatStream({
 
                 // 5. 处理错误
                 else if (payload.type === 'error') {
-                  console.error("❌ [Error Processing] 后端错误", {
-                    errorContent: payload.content,
-                    errorType: typeof payload.content,
-                    sessionId: currentSessionId,
-                    timestamp: new Date().toISOString()
-                  });
-                  
-                  streamError(payload.content, currentSessionId?.toString());
+                  logger.error('stream', `后端错误: ${payload.content}`);
                   
                   updateLastMessage(msg => {
                     const errorMessage = `\n\n❌ 后端错误: ${payload.content}`;
-                    console.log("🚨 [Error Update] 更新错误消息", {
-                      originalContentLength: msg.content?.length || 0,
-                      errorMessage: payload.content,
-                      willFinishThinking: true
-                    });
-                    
                     return {
                       ...msg,
                       content: msg.content + errorMessage,
@@ -385,7 +279,7 @@ export function useChatStream({
                   sessionId: currentSessionId
                 });
                 
-                streamError(`JSON解析失败: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`, currentSessionId?.toString());
+                logger.error('stream', `JSON解析失败: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
                 
                 // 如果 JSON 解析失败，尝试作为普通文本处理
                 if (safeDataStr && !safeDataStr.startsWith("{")) {
@@ -467,7 +361,7 @@ export function useChatStream({
             totalBytesSoFar: totalBytesReceived
           });
           
-          streamError(`流读取错误 (第${reconnectAttempts}次尝试): ${readError instanceof Error ? readError.message : 'Unknown error'}`, currentSessionId?.toString());
+          logger.error('stream', `[Stream Error] 流读取错误 (第${reconnectAttempts}次尝试): ${readError instanceof Error ? readError.message : 'Unknown error'}`, { sessionId: currentSessionId?.toString() });
           
           if (reconnectAttempts >= maxReconnectAttempts) {
             console.error("💥 [Stream Failure] 流式传输彻底失败", {
@@ -503,7 +397,7 @@ export function useChatStream({
       });
       
       const errorMessage = exception instanceof Error ? exception.message : "未知错误";
-      streamError(`流处理失败: ${errorMessage}`, currentSessionId?.toString());
+      logger.error('stream', `流处理失败: ${errorMessage}`);
       
       updateLastMessage(msg => {
         const errorText = `\n\n❌ 流式传输中断: ${errorMessage}`;

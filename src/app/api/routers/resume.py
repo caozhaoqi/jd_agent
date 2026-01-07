@@ -18,16 +18,22 @@ async def upload_resume(
     db: Session = Depends(get_session),
 ):
     try:
+        logger.info(f"用户 {user.id} 上传简历: {file.filename}")
         resume_text = await parse_resume_file(file)
         if not resume_text:
             raise_bad_request("无法解析简历文件或文件内容为空")
 
+        logger.info(f"简历解析成功，开始提取特征...")
         facts = await extract_resume_features(resume_text)
+        logger.info(f"提取到 {len(facts) if facts else 0} 条特征")
+
         if not facts:
             return {"msg": "简历解析完成，但未提取到有效信息", "new_entries": 0}
 
         count = 0
         for fact in facts:
+            if not fact.content:
+                continue
             exists = db.exec(
                 select(UserProfile).where(
                     UserProfile.user_id == user.id, UserProfile.content == fact.content
@@ -43,9 +49,12 @@ async def upload_resume(
                 )
                 count += 1
         db.commit()
+        logger.info(f"简历处理完成，新增 {count} 条记录")
         return {"msg": "简历解析成功", "new_entries": count}
     except Exception as e:
         logger.error(f"简历上传处理失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise_internal_error(message="简历处理失败", exc=e)
 
 

@@ -28,24 +28,25 @@ export default function LogsPage() {
   };
 
   const generateTestLogs = () => {
-    // 生成测试日志
-    logger.info('general', '日志系统测试页面已加载');
-    logger.debug('ui', '生成测试日志功能', { timestamp: new Date().toISOString() });
-    logger.warn('network', '这是一个测试警告日志', { test: true });
-    logger.error('stream', '这是一个测试错误日志', { errorCode: 'TEST_001' });
-    
-    // 模拟数据流日志
-    logger.streamReceive({ chunk: 'test_chunk_1' }, { size: 100 });
-    logger.streamSend({ message: '测试发送数据' }, { type: 'test' });
-    
-    // 模拟认证日志
-    logger.authLogin('test_user', true);
-    logger.authToken('test_token_123', '已设置');
-    
-    // 模拟状态更新日志
-    logger.stateUpdate('test_store', 'SET_USER', { userId: '123' });
-    
-    setTestLogCount(8);
+    // 生成测试日志（仅在开发环境）
+    if (process.env.NODE_ENV === 'development') {
+      logger.info('general', '日志系统测试页面已加载');
+      logger.debug('ui', '生成测试日志功能', { timestamp: new Date().toISOString() });
+      logger.warn('network', '这是一个测试警告日志', { test: true });
+      
+      // 模拟数据流日志
+      logger.streamReceive({ chunk: 'test_chunk_1' }, { size: 100 });
+      logger.streamSend({ message: '测试发送数据' }, { type: 'test' });
+      
+      // 模拟认证日志
+      logger.authLogin('test_user', true);
+      logger.authToken('test_token_123', '已设置');
+      
+      // 模拟状态更新日志
+      logger.stateUpdate('test_store', 'SET_USER', { userId: '123' });
+      
+      setTestLogCount(7);
+    }
   };
 
   const handleGenerateMoreLogs = () => {

@@ -1,23 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import clsx from "clsx";
 import { Volume2, VolumeX, PanelRightOpen, PanelRightClose, Database } from "lucide-react";
 
-// Stores and Hooks
 import { useSessionStore } from "@/stores/useSessionStore";
 import { useMessageStore } from "@/stores/useMessageStore";
 import { useChatStream, API_BASE } from "@/hooks/useChat";
 import { ChatMode } from "@/types/chat";
 
-// Components
 import Sidebar from "@/components/Sidebar";
-import MessageList from "@/components/MessageList";
-import BrainDashboard, { DashboardState } from "@/components/BrainDashboard";
+import { DashboardState } from "@/components/BrainDashboard";
+
+const MessageList = dynamic(() => import("@/components/MessageList"), {
+  ssr: false,
+  loading: () => <div className="flex-1 bg-gray-50 animate-pulse" />
+});
 
 const ChatInput = dynamic(() => import("@/components/ChatInput"), { ssr: false });
+
+const BrainDashboard = dynamic(() => import("@/components/BrainDashboard"), {
+  ssr: false,
+  loading: () => <div className="w-[300px] bg-gray-50 animate-pulse" />
+});
 
 export default function Home() {
   const router = useRouter();

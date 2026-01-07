@@ -1,14 +1,16 @@
 import { create } from 'zustand';
 import { Session } from '@/types/chat';
-import { API_BASE } from '@/hooks/useChat'; // 复用 API base
+import { API_BASE } from '@/hooks/useChat';
+
+const DEBUG = process.env.NODE_ENV === 'development';
 
 interface SessionState {
   sessions: Session[];
   currentSessionId: number | null;
   token: string | null;
   username: string | null;
-  isAuthenticated: boolean; // 是否已认证
-  isInitializing: boolean; // 是否正在初始化认证状态
+  isAuthenticated: boolean;
+  isInitializing: boolean;
   fetchSessions: () => Promise<void>;
   setCurrentSessionId: (id: number | null) => void;
   setToken: (token: string | null) => void;
@@ -19,66 +21,69 @@ interface SessionState {
 
 const canUseDOM = typeof window !== 'undefined';
 
+const log = (...args: any[]) => {
+  if (DEBUG) console.log(...args);
+};
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   sessions: [],
   currentSessionId: null,
   token: null,
   username: null,
   isAuthenticated: false,
-  isInitializing: true, // 初始状态为正在初始化
+  isInitializing: true,
 
   fetchSessions: async () => {
     const token = get().token;
     if (!token) {
-      console.log("🔐 fetchSessions: No token found");
+      log("🔐 fetchSessions: No token found");
       return;
     }
 
-    console.log("🔐 fetchSessions: Fetching sessions with token");
+    log("🔐 fetchSessions: Fetching sessions");
     try {
       const res = await fetch(`${API_BASE}/chat/history/sessions`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       
       if (res.status === 401) {
-        console.log("🔐 fetchSessions: Token expired, logging out");
+        log("🔐 fetchSessions: Token expired");
         get().logout();
         return;
       }
       
       if (res.ok) {
         const sessionsData = await res.json();
-        console.log("🔐 fetchSessions: Sessions fetched successfully", sessionsData);
+        log("🔐 fetchSessions: Success", sessionsData.length, "sessions");
         set({ sessions: sessionsData });
       } else {
-        console.error("🔐 fetchSessions: Failed to fetch sessions", res.status, res.statusText);
+        log("🔐 fetchSessions: Failed", res.status);
       }
     } catch (e) {
-      console.error("🔐 fetchSessions: Network error", e);
+      log("🔐 fetchSessions: Network error", e);
     }
   },
 
   setCurrentSessionId: (id) => {
-    console.log("🔐 setCurrentSessionId:", id);
+    log("🔐 setCurrentSessionId:", id);
     set({ currentSessionId: id });
   },
 
   setToken: (token) => {
-    console.log("🔐 setToken: Token", token ? "received" : "cleared");
+    log("🔐 setToken:", token ? "received" : "cleared");
     set({ token });
   },
 
   setUsername: (username) => {
-    console.log("🔐 setUsername:", username);
+    log("🔐 setUsername:", username);
     set({ username });
   },
 
   initializeAuth: () => {
-    console.log("🔐 initializeAuth: Starting authentication initialization");
+    log("🔐 initializeAuth: Starting");
     
-    // 确保在浏览器环境中运行
     if (!canUseDOM) {
-      console.log("🔐 initializeAuth: Not in browser environment, skipping initialization");
+      log("🔐 initializeAuth: Not in browser environment");
       set({ isInitializing: false });
       return;
     }
@@ -87,11 +92,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const storedToken = localStorage.getItem("token");
       const storedUsername = localStorage.getItem("username");
       
-      console.log("🔐 initializeAuth: Stored token exists:", !!storedToken);
-      console.log("🔐 initializeAuth: Stored username exists:", !!storedUsername);
+      log("🔐 initializeAuth: Stored credentials found:", !!storedToken);
       
       if (storedToken && storedUsername) {
-        console.log("🔐 initializeAuth: Found stored credentials, setting authenticated state");
+        log("🔐 initializeAuth: Setting authenticated state");
         set({ 
           token: storedToken, 
           username: storedUsername, 
@@ -100,14 +104,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         });
         get().fetchSessions();
       } else {
-        console.log("🔐 initializeAuth: No stored credentials, setting unauthenticated state");
+        log("🔐 initializeAuth: No credentials, setting unauthenticated");
         set({ 
           isAuthenticated: false,
           isInitializing: false 
         });
       }
     } catch (error) {
-      console.error("🔐 initializeAuth: Error accessing localStorage:", error);
+      log("🔐 initializeAuth: Error", error);
       set({ 
         isAuthenticated: false,
         isInitializing: false 
@@ -116,7 +120,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   logout: () => {
-    console.log("🔐 logout: Logging out user");
+    log("🔐 logout: Logging out");
     localStorage.removeItem("token");
     localStorage.removeItem("username");
     set({ 
@@ -127,7 +131,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       isAuthenticated: false,
       isInitializing: false
     });
-    // 在实际应用中，这里会触发路由跳转到登录页
     window.location.href = '/login';
   },
 }));

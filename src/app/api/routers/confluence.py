@@ -29,7 +29,7 @@ async def query_confluence_kb(request: ConfluenceQueryRequest):
     """
     try:
         logger.info(f"🔍 查询Confluence知识库: {request.query}")
-        result = await confluence_kb_engine.search(
+        result = confluence_kb_engine.search(
             query=request.query, top_k=request.top_k
         )
         return ConfluenceQueryResponse(
