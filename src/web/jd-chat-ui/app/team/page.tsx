@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Users, Plus, Copy, Check, Trash2, Crown, Shield, User, X } from 'lucide-react';
 import { Team, TeamMember, TeamRole, ApiResponse } from '@/types/team';
 import { handleAuthError } from '@/utils/auth-handler';
+import { useSessionStore } from '@/stores/useSessionStore';
 
 interface TeamPageProps {
   onNavigate: (page: string) => void;
@@ -25,13 +26,17 @@ export default function TeamPage({ onNavigate }: TeamPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const { token } = useSessionStore();
+
   useEffect(() => {
     fetchTeams();
   }, []);
 
   const fetchTeams = async () => {
     try {
-      const res = await fetch('/api/v1/teams');
+      const res = await fetch('/api/v1/teams', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.status === 401) {
         handleAuthError();
         return;
@@ -87,8 +92,11 @@ export default function TeamPage({ onNavigate }: TeamPageProps) {
     try {
       const res = await fetch('/api/v1/teams/invitations/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: inviteRole }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ team_id: currentTeam.id, role: inviteRole }),
       });
       if (res.status === 401) {
         handleAuthError();
@@ -117,6 +125,12 @@ export default function TeamPage({ onNavigate }: TeamPageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invitation_code: joinCode }),
       });
+
+      if (res.status === 401) {
+        handleAuthError();
+        return;
+      }
+
       const data = await res.json() as ApiResponse<Team>;
       if (data.code === 0 && data.data) {
         setTeams([...teams, data.data]);
@@ -159,10 +173,23 @@ export default function TeamPage({ onNavigate }: TeamPageProps) {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyToClipboard = async (text: string) => {
+    if (!text) {
+      setError('邀请码为空');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setSuccess('复制成功');
+      setTimeout(() => {
+        setCopied(false);
+        setSuccess('');
+      }, 2000);
+    } catch (err) {
+      setError('复制失败，请手动复制');
+      setTimeout(() => setError(''), 2000);
+    }
   };
 
   const getRoleIcon = (role: TeamRole) => {
@@ -236,14 +263,43 @@ export default function TeamPage({ onNavigate }: TeamPageProps) {
               onClick={() => setCurrentTeam(team)}
             >
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex-1">
                   <h3 className="font-semibold text-lg">{team.name}</h3>
                   {team.description && <p className="text-gray-500 text-sm mt-1">{team.description}</p>}
                   <p className="text-gray-400 text-xs mt-2">{team.member_count} 名成员</p>
                 </div>
-                {currentTeam?.id === team.id && (
-                  <span className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-sm">当前团队</span>
-                )}
+                <div className="flex items-center gap-3">
+                  {currentTeam?.id === team.id && (
+                    <div className="flex items-center gap-2">
+                      {inviteCode ? (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-lg">
+                          <span className="text-xs font-mono text-green-700 max-w-[80px] truncate">{inviteCode}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(inviteCode);
+                            }}
+                            className="p-1 hover:bg-green-100 rounded transition-colors"
+                            title="复制邀请码"
+                          >
+                            {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} className="text-green-600" />}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGenerateInvite();
+                          }}
+                          className="px-3 py-1 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
+                        >
+                          <Plus size={12} /> 邀请码
+                        </button>
+                      )}
+                      <span className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-sm">当前团队</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -251,44 +307,89 @@ export default function TeamPage({ onNavigate }: TeamPageProps) {
       )}
 
       {currentTeam && (
-        <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">成员列表</h2>
-            <button
-              onClick={handleGenerateInvite}
-              className="px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm flex items-center gap-1"
-            >
-              <Plus size={14} /> 邀请成员
-            </button>
-          </div>
-          <div className="bg-white border rounded-lg overflow-hidden">
-            {currentTeam.members?.map((member) => (
-              <div key={member.id} className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50">
+        <div className="mt-8 space-y-6">
+          {/* 邀请码分享卡片 */}
+          {currentTeam && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-gray-500" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{member.username}</p>
-                    <p className="text-sm text-gray-500">{member.email}</p>
-                  </div>
+                  <Users className="w-5 h-5 text-blue-500" />
+                  <h2 className="text-lg font-semibold text-blue-900">邀请新成员</h2>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-sm">
-                    {getRoleIcon(member.role)}
-                    <span>{getRoleName(member.role)}</span>
-                  </span>
-                  {member.role !== 'owner' && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRemoveMember(member.id); }}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={handleGenerateInvite}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm"
+                >
+                  <Plus size={14} /> 生成邀请码
+                </button>
               </div>
-            ))}
+              
+              {inviteCode ? (
+                <div className="bg-white border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">团队邀请码</p>
+                    <span className="text-xs text-gray-500">有效期 7 天</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1 px-3 py-2 bg-gray-50 border rounded-lg font-mono text-sm text-gray-700 select-all">
+                      {inviteCode}
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(inviteCode)}
+                      className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
+                      title="复制邀请码"
+                    >
+                      {copied ? <Check size={16} /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    复制邀请码分享给其他人，他们可以使用此邀请码加入团队
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-gray-500 text-sm mb-3">点击上方按钮生成邀请码</p>
+                  <p className="text-xs text-gray-400">生成的邀请码将在 7 天后过期</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 成员列表 */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">成员列表</h2>
+              <span className="text-sm text-gray-500">{currentTeam?.member_count || 0} 名成员</span>
+            </div>
+            <div className="bg-white border rounded-lg overflow-hidden">
+              {currentTeam.members?.map((member) => (
+                <div key={member.id} className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{member.username || `用户 ${member.user_id}`}</p>
+                      <p className="text-sm text-gray-500">ID: {member.user_id}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-sm">
+                      {getRoleIcon(member.role)}
+                      <span>{getRoleName(member.role)}</span>
+                    </span>
+                    {member.role !== 'owner' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRemoveMember(member.id); }}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

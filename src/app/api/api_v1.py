@@ -11,6 +11,11 @@ from api.routers import (
     video_analysis,
     confluence,
     logs,
+    team,
+    blog,
+    interview_style,
+    report_export,
+    knowledge_graph,
 )
 
 api_router = APIRouter()
@@ -20,7 +25,7 @@ api_router.include_router(resume.router, prefix="/resume", tags=["Resume"])
 api_router.include_router(chat.router, prefix="/chat", tags=["Chat"])
 api_router.include_router(
     interview.router, prefix="/interview", tags=["Interview"]
-)  # 包含 /generate-guide, /agent/feedback 等
+)
 api_router.include_router(audio.router, prefix="/audio", tags=["Audio"])
 api_router.include_router(rag.router, prefix="/qa", tags=["RAG"])
 api_router.include_router(webrtc.router, prefix="/webrtc", tags=["WebRTC"])
@@ -30,3 +35,8 @@ api_router.include_router(
 )
 api_router.include_router(confluence.router, prefix="/confluence", tags=["Confluence"])
 api_router.include_router(logs.router, prefix="/logs", tags=["Logs"])
+api_router.include_router(team.router, prefix="/teams", tags=["Teams"])
+api_router.include_router(blog.router, prefix="/blog", tags=["Blog"])
+api_router.include_router(interview_style.router, prefix="/interview-style", tags=["Interview Style"])
+api_router.include_router(report_export.router, prefix="/report-export", tags=["Report Export"])
+api_router.include_router(knowledge_graph.router, prefix="/knowledge-graph", tags=["Knowledge Graph"])

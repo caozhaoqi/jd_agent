@@ -182,10 +182,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 # 注册路由
 app.include_router(api_router, prefix="/api/v1", tags=["Interview v1"])
 app.include_router(api_router_v2, prefix="/api/v2", tags=["Interview v2"])
-app.include_router(knowledge_graph_router, prefix="/api/v1/knowledge", tags=["Knowledge Graph"])
-app.include_router(interview_style_router, prefix="/api/v1/interview", tags=["Interview Style"])
-app.include_router(team_router, prefix="/api/v1/teams", tags=["Team Management"])
-app.include_router(report_export_router, prefix="/api/v1/reports", tags=["Report Export"])
 
 
 @app.get("/", tags=["System"])

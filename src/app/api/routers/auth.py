@@ -74,3 +74,13 @@ def login(req: AuthRequest, session: Session = Depends(get_session)):
         "status": "success",
         "data": {"access_token": token, "token_type": "bearer"},
     }
+
+
+@router.get("/me")
+def get_current_user_info(user: User = Depends(get_current_user)):
+    """获取当前登录用户信息"""
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email
+    }

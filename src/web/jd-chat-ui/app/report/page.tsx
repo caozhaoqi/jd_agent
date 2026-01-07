@@ -5,6 +5,7 @@ import { FileText, Download, History, Loader2, Check, Copy, Trash2, FileJson, Fi
 import { ExportFormat, ExportRecord } from '@/types/report';
 import { ApiResponse } from '@/types/team';
 import { handleAuthError } from '@/utils/auth-handler';
+import { useSessionStore } from '@/stores/useSessionStore';
 
 interface ReportPageProps {
   onNavigate: (page: string) => void;
@@ -35,6 +36,7 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
   const [success, setSuccess] = useState('');
   const [copied, setCopied] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<string | null>(null);
+  const { token } = useSessionStore();
 
   useEffect(() => {
     fetchSessions();
@@ -43,7 +45,9 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
 
   const fetchSessions = async () => {
     try {
-      const res = await fetch('/api/v1/reports/sessions');
+      const res = await fetch('/api/v1/reports/sessions', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.status === 401) {
         handleAuthError();
         return;
@@ -66,7 +70,9 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch('/api/v1/reports/history');
+      const res = await fetch('/api/v1/reports/history', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.status === 401) {
         handleAuthError();
         return;
@@ -97,13 +103,21 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
     try {
       const res = await fetch('/api/v1/reports/export', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify({
           session_id: selectedSession.id,
           format: selectedFormat,
           report_title: reportTitle,
         }),
       });
+
+      if (res.status === 401) {
+        handleAuthError();
+        return;
+      }
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -136,7 +150,9 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
 
   const handleDownload = async (record: ExportRecord) => {
     try {
-      const res = await fetch(`/api/v1/reports/exports/${record.id}/download`);
+      const res = await fetch(`/api/v1/reports/exports/${record.id}/download`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.status === 401) {
         handleAuthError();
         return;
@@ -164,7 +180,10 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
   const handleDeleteHistory = async (recordId: number) => {
     if (!confirm('确定要删除这条导出记录吗？')) return;
     try {
-      const res = await fetch(`/api/v1/reports/exports/${recordId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/reports/exports/${recordId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.status === 401) {
         handleAuthError();
         return;

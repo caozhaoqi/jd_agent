@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.models import Team, TeamMember, TeamInvitation, TeamRole, InvitationStatus, User
 from core.db_auth import get_db_dependency
@@ -53,6 +53,7 @@ class InvitationCreate(BaseModel):
 
 
 class InvitationCodeCreate(BaseModel):
+    team_id: int
     role: str = "member"
 
 
@@ -84,7 +85,7 @@ class JoinTeamResponse(BaseModel):
 class InvitationResponse(BaseModel):
     id: int
     team_id: int
-    email: str
+    email: Optional[str] = None
     role: str
     status: str
     created_at: datetime
@@ -311,6 +312,12 @@ async def delete_team(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
     
+    await db.execute(
+        delete(TeamMember).where(TeamMember.team_id == team_id)
+    )
+    await db.execute(
+        delete(TeamInvitation).where(TeamInvitation.team_id == team_id)
+    )
     await db.delete(team)
     await db.commit()
     
@@ -504,27 +511,28 @@ async def update_member_role(
     return {"message": "Role updated successfully"}
 
 
-@router.post("/invitations/create", response_model=InvitationCodeResponse)
+@router.post("/invitations/create")
 async def create_invitation_code(
     request: InvitationCodeCreate,
     db: AsyncSession = Depends(get_db_dependency),
     user_id: int = Depends(get_current_user_id)
 ):
     result = await db.execute(
-        select(TeamMember).where(TeamMember.user_id == user_id)
+        select(TeamMember).where(
+            TeamMember.team_id == request.team_id,
+            TeamMember.user_id == user_id
+        )
     )
     member = result.scalar_one_or_none()
     
     if not member:
-        raise HTTPException(status_code=403, detail="You are not a member of any team")
-    
-    team_id = member.team_id
+        raise HTTPException(status_code=403, detail="You are not a member of this team")
     
     if member.role not in [TeamRole.OWNER, TeamRole.ADMIN]:
         raise HTTPException(status_code=403, detail="Not authorized to invite members")
     
     invitation = TeamInvitation(
-        team_id=team_id,
+        team_id=request.team_id,
         code=secrets.token_urlsafe(16),
         role=TeamRole(request.role),
         invited_by=user_id,
@@ -535,15 +543,19 @@ async def create_invitation_code(
     await db.commit()
     await db.refresh(invitation)
     
-    return InvitationCodeResponse(
-        code=invitation.code,
-        team_id=invitation.team_id,
-        role=invitation.role.value,
-        expires_at=invitation.expires_at
+    return ApiResponse(
+        code=0,
+        message="邀请码创建成功",
+        data={
+            "code": invitation.code,
+            "team_id": invitation.team_id,
+            "role": invitation.role.value,
+            "expires_at": invitation.expires_at
+        }
     )
 
 
-@router.post("/join", response_model=TeamResponse)
+@router.post("/join", response_model=ApiResponse)
 async def join_team(
     request: JoinTeamRequest,
     db: AsyncSession = Depends(get_db_dependency),
@@ -555,20 +567,36 @@ async def join_team(
     invitation = result.scalar_one_or_none()
     
     if not invitation:
-        raise HTTPException(status_code=404, detail="Invalid invitation code")
+        return ApiResponse(
+            code=400,
+            message="无效的邀请码",
+            data=None
+        )
     
     if invitation.status != InvitationStatus.PENDING:
-        raise HTTPException(status_code=400, detail="Invitation has already been used")
+        return ApiResponse(
+            code=400,
+            message="邀请码已被使用",
+            data=None
+        )
     
     if invitation.expires_at < datetime.now():
         invitation.status = InvitationStatus.EXPIRED
         await db.commit()
-        raise HTTPException(status_code=400, detail="Invitation has expired")
+        return ApiResponse(
+            code=400,
+            message="邀请码已过期",
+            data=None
+        )
     
     team_result = await db.execute(select(Team).where(Team.id == invitation.team_id))
     team = team_result.scalar_one_or_none()
     if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+        return ApiResponse(
+            code=404,
+            message="团队不存在",
+            data=None
+        )
     
     existing_result = await db.execute(
         select(TeamMember).where(
@@ -577,7 +605,11 @@ async def join_team(
         )
     )
     if existing_result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="You are already a member of this team")
+        return ApiResponse(
+            code=400,
+            message="您已经是该团队成员",
+            data=None
+        )
     
     member = TeamMember(
         team_id=invitation.team_id,
@@ -610,14 +642,26 @@ async def join_team(
             joined_at=m.joined_at
         ))
     
-    return TeamResponse(
-        id=team.id,
-        name=team.name,
-        description=team.description,
-        owner_id=team.owner_id,
-        created_at=team.created_at,
-        member_count=len(members),
-        members=member_responses
+    team_data = {
+        "id": team.id,
+        "name": team.name,
+        "description": team.description,
+        "owner_id": team.owner_id,
+        "created_at": team.created_at.isoformat(),
+        "member_count": len(members),
+        "members": [{
+            "id": m.id,
+            "user_id": m.user_id,
+            "username": None,
+            "role": m.role.value if isinstance(m.role, TeamRole) else m.role,
+            "joined_at": m.joined_at.isoformat()
+        } for m in members]
+    }
+    
+    return ApiResponse(
+        code=0,
+        message="加入团队成功",
+        data=team_data
     )
 
 

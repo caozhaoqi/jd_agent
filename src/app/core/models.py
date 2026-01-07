@@ -54,7 +54,8 @@ class TeamMember(SQLModel, table=True):
 class TeamInvitation(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     team_id: int = Field(foreign_key="team.id", index=True)
-    email: str
+    code: str = Field(unique=True, index=True)
+    email: Optional[str] = Field(default=None)
     role: TeamRole = TeamRole.MEMBER
     status: InvitationStatus = InvitationStatus.PENDING
     invited_by: int = Field(foreign_key="user.id")
