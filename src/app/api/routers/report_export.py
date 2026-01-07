@@ -1,17 +1,37 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
-from typing import Optional
+from typing import Optional, List, Any
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import json
 
 from core.db_auth import get_db_dependency
 from models.interview_report import InterviewReportExport, InterviewReportExportCreate
+from core.models import ChatSession, ChatMessage
 from services.report_export_service import export_service
 from api.deps import get_current_user
 
 router = APIRouter()
+
+
+class ApiResponse(BaseModel):
+    code: int = 0
+    message: str = "success"
+    data: Optional[Any] = None
+
+
+class InterviewSessionResponse(BaseModel):
+    id: int
+    title: str
+    job_position: str
+    created_at: datetime
+    message_count: int
+
+
+class SessionListResponse(BaseModel):
+    sessions: List[InterviewSessionResponse]
+    total: int
 
 
 class ExportRequest(BaseModel):
@@ -43,6 +63,46 @@ class ExportListResponse(BaseModel):
     created_at: datetime
 
 
+@router.get("/sessions", response_model=ApiResponse)
+async def list_sessions(
+    db: AsyncSession = Depends(get_db_dependency),
+    user=Depends(get_current_user)
+):
+    """获取面试记录列表"""
+    sessions_result = await db.execute(
+        select(ChatSession)
+        .where(ChatSession.user_id == user.id)
+        .order_by(ChatSession.created_at.desc())
+    )
+    sessions = sessions_result.scalars().all()
+    
+    session_responses = []
+    for session in sessions:
+        count_result = await db.execute(
+            select(func.count())
+            .select_from(ChatMessage)
+            .where(ChatMessage.session_id == session.id)
+        )
+        message_count = count_result.scalar() or 0
+        
+        session_responses.append({
+            "id": session.id,
+            "title": session.title or "未命名会话",
+            "job_position": getattr(session, 'job_position', None) or "未指定职位",
+            "created_at": session.created_at.isoformat(),
+            "message_count": message_count
+        })
+    
+    return ApiResponse(
+        code=0,
+        message="success",
+        data={
+            "sessions": session_responses,
+            "total": len(session_responses)
+        }
+    )
+
+
 @router.get("/exports", response_model=list[ExportListResponse])
 async def list_exports(
     team_id: Optional[int] = None,
@@ -71,6 +131,42 @@ async def list_exports(
         )
         for e in exports
     ]
+
+
+@router.get("/history")
+async def get_history(
+    team_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db_dependency),
+    user=Depends(get_current_user)
+):
+    """获取导出历史记录"""
+    query = select(InterviewReportExport).where(InterviewReportExport.user_id == user.id)
+    
+    if team_id:
+        query = query.where(InterviewReportExport.team_id == team_id)
+    
+    query = query.order_by(InterviewReportExport.created_at.desc())
+    
+    result = await db.execute(query)
+    exports = result.scalars().all()
+    
+    return {
+        "code": 0,
+        "message": "success",
+        "data": {
+            "records": [
+                {
+                    "id": e.id,
+                    "report_title": e.report_title,
+                    "company_name": e.company_name,
+                    "position": e.position,
+                    "format": e.export_format,
+                    "created_at": e.created_at
+                }
+                for e in exports
+            ]
+        }
+    }
 
 
 @router.post("/export")

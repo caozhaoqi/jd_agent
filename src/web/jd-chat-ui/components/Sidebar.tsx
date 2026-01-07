@@ -1,8 +1,9 @@
-import { Plus, MessageSquare, LogOut, LayoutDashboard, Mic } from "lucide-react";
+import { Plus, MessageSquare, LogOut, LayoutDashboard, Mic, Users, FileText } from "lucide-react";
 import clsx from "clsx";
 import { ChatMode } from "@/types/chat";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { useMessageStore } from "@/stores/useMessageStore";
+import { useRouter } from "next/navigation";
 
 interface SidebarProps {
   mode: ChatMode;
@@ -10,6 +11,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ mode, setMode }: SidebarProps) {
+  const router = useRouter();
   const { username, sessions, currentSessionId, setCurrentSessionId, logout } = useSessionStore();
   const { resetMessages } = useMessageStore();
 
@@ -20,10 +22,17 @@ export default function Sidebar({ mode, setMode }: SidebarProps) {
   };
 
   const handleLoadSession = (id: number) => {
-    // 核心修复：加载会话前，先清空当前消息
     resetMessages();
     setCurrentSessionId(id);
     setMode('mock');
+  };
+
+  const navigateToTeam = () => {
+    router.push('/team');
+  };
+
+  const navigateToReport = () => {
+    router.push('/report');
   };
 
   return (
@@ -56,9 +65,23 @@ export default function Sidebar({ mode, setMode }: SidebarProps) {
         ))}
       </div>
 
-      <div className="p-4 border-t flex justify-between items-center text-sm text-gray-600">
-        <span className="font-bold">{username}</span>
-        <LogOut size={16} className="cursor-pointer hover:text-red-500" onClick={logout}/>
+      <div className="p-4 border-t space-y-2">
+        <button
+          onClick={navigateToTeam}
+          className="w-full py-2 bg-gray-50 text-gray-700 rounded-md text-sm font-medium flex justify-center items-center gap-2 hover:bg-gray-100 transition-colors"
+        >
+          <Users size={16} /> 团队管理
+        </button>
+        <button
+          onClick={navigateToReport}
+          className="w-full py-2 bg-gray-50 text-gray-700 rounded-md text-sm font-medium flex justify-center items-center gap-2 hover:bg-gray-100 transition-colors"
+        >
+          <FileText size={16} /> 报告导出
+        </button>
+        <div className="pt-2 border-t flex justify-between items-center text-sm text-gray-600">
+          <span className="font-bold">{username}</span>
+          <LogOut size={16} className="cursor-pointer hover:text-red-500" onClick={logout}/>
+        </div>
       </div>
     </div>
   );

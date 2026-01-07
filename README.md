@@ -41,7 +41,19 @@
 - **简历解析**: 上传 PDF/Word 简历，自动提取画像存入 SQLModel 数据库。
 - **会话回溯**: 侧边栏管理历史会话，AI 永远记得你的技术栈偏好。
 
-### 📝 5. 智能日志系统
+### � 5. 团队协作管理 (Team Management)
+- **团队创建与邀请**: 支持创建团队并通过邀请码邀请成员加入。
+- **角色权限体系**: 三级角色权限 (Owner/Admin/Member) 管理团队资源。
+- **成员管理**: 团队所有者和管理员可管理成员列表和权限。
+- **资源隔离**: 团队数据自动隔离，支持多租户场景。
+
+### 📊 6. 面试报告导出 (Report Export)
+- **多格式导出**: 支持 Markdown、HTML、纯文本三种格式导出面试报告。
+- **历史记录管理**: 查看和管理历史导出记录。
+- **Unicode 文件名支持**: 完美支持中文字符的文件名编码。
+- **流式内容生成**: 实时生成报告内容，支持大文件处理。
+
+### � 7. 智能日志系统
 - **前端日志自动保存**: 集成开源日志库 loglevel，自动将前端日志保存到服务器指定目录
 - **日志分级与分类**: 按级别（trace、debug、info、warn、error）和类别（stream、auth、ui、network、state、component、general）组织日志
 - **日志轮转与清理**: 自动管理日志文件大小，超过10MB时轮转，7天后自动清理
@@ -179,11 +191,12 @@ npm run dev
 jd_agent/
 ├── src/
 │   ├── app/                 # 后端应用
-│   │   ├── api/             # FastAPI 路由接口 (Stream, Auth, Audio, Logs)
+│   │   ├── api/             # FastAPI 路由接口 (Stream, Auth, Audio, Logs, Team, ReportExport)
 │   │   ├── chains/          # LangChain 原子能力 (Generator, Parser)
 │   │   ├── core/            # 核心配置 (Config, DB, LLM Factory) & 统一错误处理
 │   │   ├── graph/           # LangGraph 多智能体编排 (Nodes, Workflow) - 含人工介入节点
-│   │   └── services/        # 业务逻辑层
+│   │   ├── models/          # 数据模型 (User, Resume, Interview, Team, InterviewReport)
+│   │   └── services/        # 业务逻辑层 (LLM Service, Report Export Service)
 │   ├── web/                 # 前端应用
 │   │   └── jd-chat-ui/      # Next.js 前端
 │   │       ├── app/         # 页面组件 (包括日志系统测试页面 /logs)
@@ -226,6 +239,16 @@ jd_agent/
   - [x] 实现日志文件轮转和自动清理功能
   - [x] 创建 LogViewer 组件用于日志查看和分析
   - [x] 开发日志系统测试页面 (/logs)
+- [x] **v3.5**: 团队协作管理
+  - [x] 实现团队创建、成员邀请功能
+  - [x] 实现三级角色权限体系 (Owner/Admin/Member)
+  - [x] 开发团队管理 API 端点
+  - [x] 实现团队资源数据隔离
+- [x] **v3.6**: 面试报告导出
+  - [x] 开发多格式报告导出功能 (Markdown/HTML/Text)
+  - [x] 实现 Unicode 文件名编码支持
+  - [x] 创建导出记录管理功能
+  - [x] 开发流式内容生成支持
 - [ ] **v4.0**: WebRTC 超低延迟通话 (打断式交互)
 - [ ] **v5.0**: 多模态简历分析 (支持图片/PDF 图表读取)
 
