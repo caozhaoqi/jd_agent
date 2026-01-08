@@ -3,6 +3,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from core.llm_factory import get_llm
+from core.config import settings
 from loguru import logger
 
 
@@ -22,7 +23,7 @@ async def extract_resume_features(resume_text: str) -> List[UserFact]:
     """
     利用 LLM 从简历中提取关键画像
     """
-    llm = get_llm(temperature=0)  # 提取信息要绝对严谨
+    llm = get_llm(temperature=0, model=settings.MODEL_NAME)  # 提取信息要绝对严谨
     parser = PydanticOutputParser(pydantic_object=ResumeAnalysis)
 
     prompt = ChatPromptTemplate.from_template(

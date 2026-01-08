@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, User, Lock, LogIn, UserPlus, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader, User, Lock, LogIn, UserPlus, CircleAlert, Check } from "lucide-react";
 import clsx from "clsx";
 
 export default function LoginPage() {
@@ -85,12 +85,12 @@ export default function LoginPage() {
         {/* 提示信息区域 */}
         {error && (
             <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2 border border-red-100">
-                <AlertCircle size={16} /> {error}
+                <CircleAlert size={16} /> {error}
             </div>
         )}
         {success && (
             <div className="mb-4 p-3 bg-green-50 text-green-600 text-sm rounded-lg flex items-center gap-2 border border-green-100">
-                <CheckCircle2 size={16} /> {success}
+                <Check size={16} /> {success}
             </div>
         )}
 
@@ -134,7 +134,7 @@ export default function LoginPage() {
                     : "bg-blue-600 hover:bg-blue-700 hover:shadow-lg active:scale-[0.98]"
             )}
           >
-            {isLoading && <Loader2 className="animate-spin" size={18} />}
+            {isLoading && <Loader className="animate-spin" size={18} />}
             {isLogin ? "登 录" : "注 册"}
           </button>
         </form>

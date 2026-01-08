@@ -1,11 +1,12 @@
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from core.llm_factory import get_llm
+from core.config import settings
 
 
 def get_interviewer_chain(interview_type: str = "comprehensive"):
     """面试官 Agent：负责提问"""
-    llm = get_llm(temperature=0.7)  # 面试官可以灵活一点
+    llm = get_llm(temperature=0.7, model=settings.MODEL_NAME)  # 面试官可以灵活一点
 
     # 根据面试类型选择不同的角色和问题类型
     interviewer_roles = {
@@ -49,7 +50,7 @@ def get_interviewer_chain(interview_type: str = "comprehensive"):
 
 def get_candidate_chain():
     """候选人 Agent：负责回答"""
-    llm = get_llm(temperature=0.5)  # 候选人要稳重
+    llm = get_llm(temperature=0.5, model=settings.MODEL_NAME)  # 候选人要稳重
 
     prompt = ChatPromptTemplate.from_template(
         """

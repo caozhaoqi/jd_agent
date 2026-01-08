@@ -1,11 +1,12 @@
 from core.llm_factory import get_llm
+from core.config import settings
 from core.tools import search_blog_tool, search_company_tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 
 
 def create_jd_agent():
-    llm = get_llm(temperature=0)
+    llm = get_llm(temperature=0, model=settings.MODEL_NAME)
 
     # 告诉大模型：你有这两个工具可以用
     tools = [search_blog_tool, search_company_tool]

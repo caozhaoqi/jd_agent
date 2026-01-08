@@ -2,12 +2,13 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from core.llm_factory import get_llm
 from schemas.interview import JDMetaData
+from core.config import settings
 
 
 # 异步解析函数
 async def parse_jd_async(jd_text: str) -> JDMetaData:
     # 解析任务通常不需要太高创造性，温度设为 0
-    llm = get_llm(temperature=0)
+    llm = get_llm(temperature=0, model=settings.MODEL_NAME)
     parser = PydanticOutputParser(pydantic_object=JDMetaData)
 
     prompt = ChatPromptTemplate.from_template(

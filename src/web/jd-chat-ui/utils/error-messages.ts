@@ -26,7 +26,7 @@ const ERROR_MESSAGE_MAP: Record<ErrorType, ErrorMessageMapping> = {
       '检查浏览器版本是否过低',
       '联系技术支持团队'
     ],
-    icon: 'AlertCircle',
+    icon: 'CircleAlert',
     color: 'red',
     retryable: true
   },
@@ -234,7 +234,7 @@ export function getHttpErrorMessage(statusCode: number): ErrorMessageMapping {
     title: '未知错误',
     message: '发生了一个未知的错误，请重试。',
     suggestions: ['刷新页面重试', '联系技术支持团队'],
-    icon: 'AlertCircle',
+    icon: 'CircleAlert',
     color: 'gray',
     retryable: true
   };

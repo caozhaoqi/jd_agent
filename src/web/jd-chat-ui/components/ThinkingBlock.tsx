@@ -1,4 +1,4 @@
-import { BrainCircuit, Loader2, CheckCircle2 } from "lucide-react";
+import { BrainCircuit, Loader, CircleCheck } from "lucide-react";
 import clsx from "clsx";
 
 interface ThinkingBlockProps {
@@ -35,9 +35,9 @@ export default function ThinkingBlock({ thoughts, isFinished }: ThinkingBlockPro
                 "bg-gray-100 text-gray-400 scale-90"
               )}>
                 {isCompleted ? (
-                  <CheckCircle2 size={12} className="transition-all duration-300" />
+                  <CircleCheck size={12} className="transition-all duration-300" />
                 ) : isCurrent && !isFinished ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader size={12} className="animate-spin" />
                 ) : (
                   <BrainCircuit size={12} className="transition-all duration-300" />
                 )}

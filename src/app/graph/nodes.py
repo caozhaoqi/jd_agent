@@ -1,6 +1,7 @@
 import asyncio
 from core.graph_state import AgentState
 from core.llm_factory import get_llm
+from core.config import settings
 from chains.jd_parser import parse_jd_async
 from chains.company_research import research_company
 from chains.tech_gen import generate_tech_async
@@ -25,7 +26,7 @@ async def router_node(state: AgentState):
     """
     await send_thought("🧠 [调度器] 正在规划下一步...", thread_id=state.get("thread_id"))
     
-    llm = get_llm(temperature=0)
+    llm = get_llm(temperature=0, model=settings.MODEL_NAME)
     parser = JsonOutputParser(pydantic_object=RouterDecision)
 
     # 构建一个包含当前状态摘要的Prompt
@@ -149,7 +150,7 @@ async def reviewer_node(state: AgentState):
     await send_thought("⚖️ [质检员] 正在审核题目质量", "评估深度、准确性与匹配度", thread_id, delay=1.0)
     await send_data("current_step", "reviewer", thread_id)
     
-    llm = get_llm(temperature=0.1)
+    llm = get_llm(temperature=0.1, model=settings.MODEL_NAME)
     parser = JsonOutputParser(pydantic_object=ReviewResult)
     prompt = ChatPromptTemplate.from_template(
         """你是一个严格的技术面试题质检员。

@@ -138,7 +138,7 @@ async def research_company(company_name: str) -> str:
             deep_content = ""
 
     # --- 6. LLM 总结 (Prompt 优化版) ---
-    llm = get_llm(temperature=0.2)  # 调低温度，让输出更稳定干练
+    llm = get_llm(temperature=0.2, model=settings.MODEL_NAME)  # 调低温度，让输出更稳定干练
 
     context_text = "\n".join(unique_results[:6])  # 减少输入量
     full_context = f"【搜索摘要】:\n{context_text}\n\n{deep_content}"

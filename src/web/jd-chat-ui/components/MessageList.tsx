@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { Bot, User, Loader2, Play } from "lucide-react";
+import { Bot, User, Play } from "lucide-react";
 import clsx from "clsx";
 import { Message } from "@/types/chat";
 import ThinkingReveal from "./ThinkingReveal";

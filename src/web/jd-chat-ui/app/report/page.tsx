@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Download, History, Loader2, Check, Copy, Trash2, FileJson, FileCode } from 'lucide-react';
+import { FileText, Download, History, Loader, Check, Copy, Trash2, FileCode, File } from 'lucide-react';
 import { ExportFormat, ExportRecord } from '@/types/report';
 import { ApiResponse } from '@/types/team';
 import { handleAuthError } from '@/utils/auth-handler';
@@ -216,7 +216,7 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
     switch (format) {
       case 'markdown': return <FileText size={14} className="text-blue-500" />;
       case 'html': return <FileCode size={14} className="text-orange-500" />;
-      case 'text': return <FileJson size={14} className="text-gray-500" />;
+      case 'text': return <File size={14} className="text-gray-500" />;
     }
   };
 
@@ -285,10 +285,10 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">导出格式</label>
                 <div className="flex gap-2">
                   {[
-                    { value: 'markdown' as ExportFormat, label: 'Markdown', icon: FileText },
-                    { value: 'html' as ExportFormat, label: 'HTML', icon: FileCode },
-                    { value: 'text' as ExportFormat, label: '纯文本', icon: FileJson },
-                  ].map((format) => (
+                  { value: 'markdown' as ExportFormat, label: 'Markdown', icon: FileText },
+                  { value: 'html' as ExportFormat, label: 'HTML', icon: FileCode },
+                  { value: 'text' as ExportFormat, label: '纯文本', icon: File },
+                ].map((format) => (
                     <button
                       key={format.value}
                       onClick={() => setSelectedFormat(format.value)}
@@ -311,7 +311,7 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
               >
                 {exporting ? (
                   <>
-                    <Loader2 size={18} className="animate-spin" />
+                    <Loader size={18} className="animate-spin" />
                     导出中...
                   </>
                 ) : (

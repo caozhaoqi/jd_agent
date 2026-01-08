@@ -4,6 +4,7 @@ from loguru import logger
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from core.llm_factory import get_llm
+from core.config import settings
 from chains.mock_agents import get_interviewer_chain, get_candidate_chain
 
 
@@ -29,7 +30,7 @@ async def run_mock_interview_stream(
         candidate = get_candidate_chain()
 
         # 2. 初始化点评 Agent (Reviewer)
-        reviewer_llm = get_llm(temperature=0.3)  # 点评需要客观
+        reviewer_llm = get_llm(temperature=0.3, model=settings.MODEL_NAME)  # 点评需要客观
         reviewer_prompt = ChatPromptTemplate.from_template(
             """
             你是一位资深的技术面试教练。请阅读以下模拟面试的记录，对候选人的表现进行专业点评。

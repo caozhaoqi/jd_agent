@@ -28,7 +28,7 @@ async def critique_tech_questions_async(
     )
 
     # 2. 设置 LLM (建议用 Smart 模型，如 GPT-4/DeepSeek-V3，温度稍低)
-    llm = get_llm(temperature=0.3)
+    llm = get_llm(temperature=0.3, model=settings.MODEL_NAME)
     parser = PydanticOutputParser(pydantic_object=QuestionList)
 
     # 3. 编写“反思” Prompt

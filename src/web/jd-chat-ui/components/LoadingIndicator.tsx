@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Search, FileText, Brain, Loader } from "lucide-react";
+import { Loader, Search, FileText, Brain } from "lucide-react";
 import clsx from "clsx";
 
 export type LoadingType = 'default' | 'searching' | 'thinking' | 'generating' | 'uploading';
@@ -33,7 +33,7 @@ export default function LoadingIndicator({
         };
       case 'generating':
         return {
-          icon: <Loader2 size={size === 'small' ? 14 : size === 'medium' ? 18 : 24} className="text-blue-500 animate-spin" />,
+          icon: <Loader size={size === 'small' ? 14 : size === 'medium' ? 18 : 24} className="text-blue-500 animate-spin" />,
           text: message || "正在生成回复..."
         };
       case 'uploading':

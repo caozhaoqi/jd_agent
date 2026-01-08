@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Brain, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight } from "lucide-react";
 import clsx from "clsx";
 
 interface ThinkingRevealProps {

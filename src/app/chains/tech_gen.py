@@ -5,6 +5,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel
 from core.llm_factory import get_llm
+from core.config import settings
 from schemas.interview import InterviewQuestion
 from utils.text_utils import clean_json_output  # 导入重构后的函数
 
@@ -21,7 +22,7 @@ async def generate_tech_async(
     chat_history: list = [],
     user_profile: str = "",
 ) -> List[InterviewQuestion]:
-    llm = get_llm(temperature=0.7)
+    llm = get_llm(temperature=0.7, model=settings.MODEL_NAME)
     parser = PydanticOutputParser(pydantic_object=QuestionList)
 
     # 动态构建 Prompt

@@ -34,6 +34,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from core.llm_factory import get_llm
+from core.config import settings
 
 # 路径配置 (指向生成的向量库文件夹)
 DB_LOAD_PATH = "../../../blog_faiss_index"
@@ -72,7 +73,7 @@ def query_blog_knowledge(question: str):
     )
 
     # 3. 生成 (Generate)
-    llm = get_llm(temperature=0.3)
+    llm = get_llm(temperature=0.3, model=settings.MODEL_NAME)
 
     prompt = ChatPromptTemplate.from_template(
         """

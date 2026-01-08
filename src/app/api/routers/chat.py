@@ -11,6 +11,7 @@ from loguru import logger
 from api.deps import get_current_user, get_session
 from core.models import User, ChatSession, ChatMessage, ChatRequest
 from core.llm_factory import get_llm
+from core.config import settings
 from core.stream_manager import init_stream_queue
 from core.sse_manager import sse_manager
 from chains.rag_chain import ask_knowledge_base
@@ -81,7 +82,7 @@ async def stream_chat(
             else AIMessage(content=m.content)
         )
 
-    llm = get_llm(temperature=0.7, streaming=True)
+    llm = get_llm(temperature=0.7, streaming=True, model=settings.MODEL_NAME)
     chain = llm | StrOutputParser()
 
     async def generate_and_stream():

@@ -3,6 +3,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from core.llm_factory import get_llm
+from core.config import settings
 from loguru import logger
 
 
@@ -41,7 +42,7 @@ async def match_resume_with_jd(resume_text: str, jd_text: str) -> Dict[str, Any]
     Returns:
         包含匹配度分析的字典
     """
-    llm = get_llm(temperature=0.1)  # 适当的随机性，保证分析的灵活性
+    llm = get_llm(temperature=0.1, model=settings.MODEL_NAME)  # 适当的随机性，保证分析的灵活性
     parser = PydanticOutputParser(pydantic_object=MatchAnalysis)
 
     prompt = ChatPromptTemplate.from_template(

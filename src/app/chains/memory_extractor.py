@@ -20,7 +20,7 @@ async def extract_user_profile(chat_history: str) -> List[UserFact]:
     """
     从对话历史中提炼用户画像
     """
-    llm = get_llm(temperature=0.1)  # 提取事实要严谨
+    llm = get_llm(temperature=0.1, model=settings.MODEL_NAME)  # 提取事实要严谨
     parser = PydanticOutputParser(pydantic_object=UserProfileUpdate)
 
     prompt = ChatPromptTemplate.from_template(

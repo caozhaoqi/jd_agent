@@ -10,6 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 from loguru import logger
 
 from core.config import settings
+from core.llm_factory import get_llm
 from interview_experience.interview_rag import InterviewExperienceRAG
 
 # 1. 初始化路径和组件
@@ -67,7 +68,7 @@ def init_rag_components():
             改写后的查询:"""
         )
         from core.llm_factory import get_llm
-        rewrite_llm = get_llm(temperature=0.1)
+        rewrite_llm = get_llm(temperature=0.1, model=settings.MODEL_NAME)
         _rewrite_chain = rewrite_prompt | rewrite_llm | StrOutputParser()
 
     except Exception as e:
@@ -156,7 +157,7 @@ async def ask_knowledge_base(question: str):
     prompt = ChatPromptTemplate.from_template(template)
     
     from core.llm_factory import get_llm
-    llm = get_llm(temperature=0.1)
+    llm = get_llm(temperature=0.1, model=settings.MODEL_NAME)
     chain = prompt | llm | StrOutputParser()
     
     answer = await chain.ainvoke({"context": context_str, "question": question})

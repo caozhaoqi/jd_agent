@@ -1,9 +1,10 @@
 from core.llm_factory import get_llm
+from core.config import settings
 
 
 async def run_mock_interview(jd_text):
-    interviewer = get_llm(system_prompt="你是严厉的面试官，请根据JD提问")
-    candidate = get_llm(system_prompt="你是求职者，请根据简历回答")
+    interviewer = get_llm(system_prompt="你是严厉的面试官，请根据JD提问", model=settings.MODEL_NAME)
+    candidate = get_llm(system_prompt="你是求职者，请根据简历回答", model=settings.MODEL_NAME)
 
     history = []
 
@@ -16,6 +17,6 @@ async def run_mock_interview(jd_text):
     history.append(f"求职者: {a1}")
 
     # 第三轮
-    feedback = await get_llm().ainvoke(f"请点评这段对话的质量: {history}")
+    feedback = await get_llm(model=settings.MODEL_NAME).ainvoke(f"请点评这段对话的质量: {history}")
 
     return feedback

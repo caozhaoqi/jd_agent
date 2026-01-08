@@ -25,7 +25,7 @@ async def chat_with_blog(query: str):
         sources.add(item["source"])
 
     # 3. 构建 Prompt
-    llm = get_llm(temperature=0.3)  # 问答模式温度低一点，防止胡编
+    llm = get_llm(temperature=0.3, model=settings.MODEL_NAME)  # 问答模式温度低一点，防止胡编
 
     prompt = ChatPromptTemplate.from_template(
         """

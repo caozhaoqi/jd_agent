@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  AlertCircle,
-  AlertTriangle,
+  CircleAlert,
   FileX,
   Lock,
   Shield,
@@ -42,8 +41,7 @@ interface ErrorAlertProps {
 
 // 图标映射
 const iconMap = {
-  AlertCircle,
-  AlertTriangle,
+  CircleAlert,
   FileX,
   Lock,
   Shield,
@@ -165,7 +163,7 @@ export default function ErrorAlert({
 
   const { data: errorData, mapping: errorMapping } = errorInfo;
   const colors = getColorClasses(errorMapping.color);
-  const IconComponent = iconMap[errorMapping.icon as keyof typeof iconMap] || AlertCircle;
+  const IconComponent = iconMap[errorMapping.icon as keyof typeof iconMap] || CircleAlert;
 
   // 样式映射
   const typeStyles = {

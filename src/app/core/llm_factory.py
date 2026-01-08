@@ -181,7 +181,7 @@ def get_llm(
     
     if provider == "openai":
         llm_kwargs.update({
-            "model_name": model,
+            "model": model,
             "openai_api_key": settings.OPENAI_API_KEY,
             "openai_api_base": settings.OPENAI_API_BASE
         })
