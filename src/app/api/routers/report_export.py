@@ -51,6 +51,7 @@ class ExportRequest(BaseModel):
     areas_for_improvement: Optional[list] = None
     
     team_id: Optional[int] = None
+    session_id: Optional[int] = None  # 添加session_id字段
 
 
 class ExportListResponse(BaseModel):
@@ -68,6 +69,7 @@ async def list_sessions(
     db: AsyncSession = Depends(get_db_dependency),
     user=Depends(get_current_user)
 ):
+    print(f"[DEBUG] Current user: {user.id}, {user.username}")
     """获取面试记录列表"""
     sessions_result = await db.execute(
         select(ChatSession)
@@ -176,6 +178,48 @@ async def create_export(
     user=Depends(get_current_user)
 ):
     """创建并下载面试报告导出"""
+    
+    # 从session_id获取会话数据
+    if request.session_id:
+        # 获取会话
+        session_result = await db.execute(
+            select(ChatSession)
+            .where(
+                ChatSession.id == request.session_id,
+                ChatSession.user_id == user.id
+            )
+        )
+        session = session_result.scalar_one_or_none()
+        
+        if session:
+            # 获取会话消息
+            messages_result = await db.execute(
+                select(ChatMessage)
+                .where(ChatMessage.session_id == request.session_id)
+                .order_by(ChatMessage.created_at)
+            )
+            messages = messages_result.scalars().all()
+            
+            # 解析消息内容，提取面试报告数据
+            for message in messages:
+                if message.role == "assistant":
+                    try:
+                        content_json = json.loads(message.content)
+                        # 更新请求数据
+                        if "meta" in content_json:
+                            request.meta_info = content_json["meta"]
+                            if not request.company_name and content_json["meta"].get("company_name"):
+                                request.company_name = content_json["meta"]["company_name"]
+                            if not request.position and content_json["meta"].get("job_position"):
+                                request.position = content_json["meta"]["job_position"]
+                        if "tech_questions" in content_json:
+                            request.tech_questions = content_json["tech_questions"]
+                        if "hr_questions" in content_json:
+                            request.hr_questions = content_json["hr_questions"]
+                        if "company_analysis" in content_json:
+                            request.company_analysis = content_json["company_analysis"]
+                    except:
+                        continue
     
     format_lower = request.export_format.lower()
     

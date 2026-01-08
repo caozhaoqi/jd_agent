@@ -45,23 +45,27 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
 
   const fetchSessions = async () => {
     try {
-      const res = await fetch('/api/v1/reports/sessions', {
+      console.log('fetchSessions called, token:', token);
+      const res = await fetch('/api/v1/report-export/sessions', {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('fetchSessions response status:', res.status);
       if (res.status === 401) {
         handleAuthError();
         return;
       }
-      const data = await res.json() as ApiResponse<SessionResponse>;
-      if (data.code === 0 && data.data) {
-        setSessions(data.data.sessions);
-        if (data.data.sessions.length > 0) {
-          const first = data.data.sessions[0];
+      const sessionData = await res.json() as ApiResponse<SessionResponse>;
+      console.log('fetchSessions response data:', sessionData);
+      if (sessionData.code === 0 && sessionData.data) {
+        setSessions(sessionData.data.sessions);
+        if (sessionData.data.sessions.length > 0) {
+          const first = sessionData.data.sessions[0];
           setSelectedSession(first);
           setReportTitle(`面试报告 - ${first.title}`);
         }
       }
     } catch (err) {
+      console.error('fetchSessions error:', err);
       setError('获取面试记录失败');
     } finally {
       setLoading(false);
@@ -70,7 +74,7 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch('/api/v1/reports/history', {
+      const res = await fetch('/api/v1/report-export/history', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.status === 401) {
@@ -101,7 +105,7 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
     setGeneratedContent(null);
 
     try {
-      const res = await fetch('/api/v1/reports/export', {
+      const res = await fetch('/api/v1/report-export/export', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +154,7 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
 
   const handleDownload = async (record: ExportRecord) => {
     try {
-      const res = await fetch(`/api/v1/reports/exports/${record.id}/download`, {
+      const res = await fetch(`/api/v1/report-export/exports/${record.id}/download`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.status === 401) {
@@ -158,7 +162,8 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
         return;
       }
       if (!res.ok) {
-        setError('下载失败');
+        const errorData = await res.json().catch(() => ({}));
+        setError(errorData.message || '下载失败');
         return;
       }
       const blob = await res.blob();
@@ -180,7 +185,7 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
   const handleDeleteHistory = async (recordId: number) => {
     if (!confirm('确定要删除这条导出记录吗？')) return;
     try {
-      const res = await fetch(`/api/v1/reports/exports/${recordId}`, {
+      const res = await fetch(`/api/v1/report-export/exports/${recordId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -188,14 +193,14 @@ export default function ReportPage({ onNavigate }: ReportPageProps) {
         handleAuthError();
         return;
       }
-      const data = await res.json() as ApiResponse<null>;
-      if (data.code === 0) {
-        setHistory(history.filter(h => h.id !== recordId));
-        setSuccess('删除成功');
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.message || '删除失败');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        setError(errorData.message || '删除失败');
+        return;
       }
+      setHistory(history.filter(h => h.id !== recordId));
+      setSuccess('删除成功');
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError('删除失败');
     }
