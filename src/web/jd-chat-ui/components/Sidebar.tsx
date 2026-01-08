@@ -12,7 +12,7 @@ interface SidebarProps {
 
 export default function Sidebar({ mode, setMode }: SidebarProps) {
   const router = useRouter();
-  const { username, sessions, currentSessionId, setCurrentSessionId, logout } = useSessionStore();
+  const { username, sessions, currentSessionId, setCurrentSessionId, logout, fetchSessionMessages } = useSessionStore();
   const { resetMessages } = useMessageStore();
 
   const handleNewChat = () => {
@@ -21,10 +21,12 @@ export default function Sidebar({ mode, setMode }: SidebarProps) {
     setMode('guide');
   };
 
-  const handleLoadSession = (id: number) => {
+  const handleLoadSession = async (id: number) => {
     resetMessages();
     setCurrentSessionId(id);
-    setMode('mock');
+    // 加载该会话的消息
+    await fetchSessionMessages(id);
+    // 不再强制将模式设置为'mock'，保留当前模式
   };
 
   const navigateToTeam = () => {

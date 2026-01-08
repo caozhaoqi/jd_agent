@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { Session } from '@/types/chat';
+import { Session, Message } from '@/types/chat';
 import { API_BASE } from '@/hooks/useChat';
+import { useMessageStore } from './useMessageStore';
 
 const DEBUG = process.env.NODE_ENV === 'development';
 
@@ -12,12 +13,15 @@ interface SessionState {
   isAuthenticated: boolean;
   isInitializing: boolean;
   fetchSessions: () => Promise<void>;
+  fetchSessionMessages: (sessionId: number) => Promise<void>;
   setCurrentSessionId: (id: number | null) => void;
   setToken: (token: string | null) => void;
   setUsername: (username: string | null) => void;
   initializeAuth: () => void;
   logout: () => void;
 }
+
+
 
 const canUseDOM = typeof window !== 'undefined';
 
@@ -61,6 +65,44 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     } catch (e) {
       log("🔐 fetchSessions: Network error", e);
+    }
+  },
+
+  fetchSessionMessages: async (sessionId) => {
+    const token = get().token;
+    if (!token) {
+      log("🔐 fetchSessionMessages: No token found");
+      return;
+    }
+
+    log("🔐 fetchSessionMessages: Fetching messages for session", sessionId);
+    try {
+      const res = await fetch(`${API_BASE}/chat/history/messages/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (res.status === 401) {
+        log("🔐 fetchSessionMessages: Token expired");
+        get().logout();
+        return;
+      }
+      
+      if (res.ok) {
+        const messagesData = await res.json();
+        log("🔐 fetchSessionMessages: Success", messagesData.length, "messages");
+        // 处理历史消息：为所有消息设置 isThinkingFinished 为 true，避免显示正在初始化的状态
+        const processedMessages = messagesData.map((msg: any) => ({
+          ...msg,
+          isThinkingFinished: true,
+          thoughts: msg.thoughts || []
+        }));
+        // 将处理后的消息设置到 useMessageStore 中
+        useMessageStore.getState().setMessages(processedMessages);
+      } else {
+        log("🔐 fetchSessionMessages: Failed", res.status);
+      }
+    } catch (e) {
+      log("🔐 fetchSessionMessages: Network error", e);
     }
   },
 

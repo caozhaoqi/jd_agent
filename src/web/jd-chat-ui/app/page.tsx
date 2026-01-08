@@ -84,9 +84,12 @@ export default function Home() {
 
   const handleModeChange = (newMode: ChatMode | 'rag') => {
     setMode(newMode);
-    resetMessages();
-    if (newMode === 'rag') {
-      setMessages([{ role: "assistant", content: "📚 已切换到**知识库模式**。请问我任何关于技术栈或博客的问题。" }]);
+    // 只有在切换到rag或mock模式时才重置消息，切换到guide模式时保留消息
+    if (newMode === 'rag' || newMode === 'mock') {
+      resetMessages();
+      if (newMode === 'rag') {
+        setMessages([{ role: "assistant", content: "📚 已切换到**知识库模式**。请问我任何关于技术栈或博客的问题。" }]);
+      }
     }
   };
 

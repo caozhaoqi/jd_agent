@@ -59,6 +59,15 @@ useEffect(() => {
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth relative bg-white">
       <div className="max-w-3xl mx-auto space-y-8 pb-10">
+        {/* 当消息为空时显示提示 */}
+        {messages.length === 0 && !isLoading && !error && (
+          <div className="text-center py-12 space-y-4">
+            <Bot size={48} className="mx-auto text-gray-300" />
+            <h3 className="text-lg font-medium text-gray-800">欢迎使用JD分析助手</h3>
+            <p className="text-gray-500 max-w-md mx-auto">请在下方输入框中粘贴或输入岗位JD内容，我将为您生成详细的岗位分析报告。</p>
+          </div>
+        )}
+        
         {messages.map((msg, idx) => (
           <div key={idx} className={clsx("flex gap-4", msg.role === "user" ? "flex-row-reverse" : "")}>
             <div className={clsx(
@@ -83,7 +92,39 @@ useEffect(() => {
                   {/* 回复正文 */}
                   {(msg.content || msg.isThinkingFinished) && (
                     <div className="prose prose-sm max-w-none animate-in fade-in duration-500">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      {/* 处理 JSON 格式的内容 */}
+                      {(() => {
+                        let contentToRender = msg.content;
+                        // 检查内容是否为 JSON 格式
+                        if (contentToRender && contentToRender.startsWith('{') && contentToRender.endsWith('}')) {
+                          try {
+                            const jsonData = JSON.parse(contentToRender);
+                            // 如果是 JSON 格式，提取 useful 信息或格式化为易读形式
+                            // 这里可以根据实际的 JSON 结构进行调整
+                            if (jsonData.tech_questions && jsonData.tech_questions.length > 0) {
+                              // 如果有技术问题，渲染为列表
+                              return (
+                                <div>
+                                  <h4>技术问题：</h4>
+                                  <ul>
+                                    {jsonData.tech_questions.map((q: any, idx: number) => (
+                                      <li key={idx}>{q.question}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            } else {
+                              // 否则，显示格式化的 JSON
+                              contentToRender = JSON.stringify(jsonData, null, 2);
+                              return <pre><code>{contentToRender}</code></pre>;
+                            }
+                          } catch (e) {
+                            // 如果解析失败，作为普通文本处理
+                          }
+                        }
+                        // 默认使用 ReactMarkdown 渲染
+                        return <ReactMarkdown>{contentToRender}</ReactMarkdown>;
+                      })()}
                     </div>
                   )}
                 </div>
