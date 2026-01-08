@@ -16,6 +16,8 @@ from api.routers import (
     interview_style,
     report_export,
     knowledge_graph,
+    monitoring,
+    ab_testing,
 )
 
 api_router = APIRouter()
@@ -40,3 +42,5 @@ api_router.include_router(blog.router, prefix="/blog", tags=["Blog"])
 api_router.include_router(interview_style.router, prefix="/interview-style", tags=["Interview Style"])
 api_router.include_router(report_export.router, prefix="/report-export", tags=["Report Export"])
 api_router.include_router(knowledge_graph.router, prefix="/knowledge-graph", tags=["Knowledge Graph"])
+api_router.include_router(monitoring.router, prefix="/monitoring", tags=["Monitoring"])
+api_router.include_router(ab_testing.router, prefix="/ab-testing", tags=["A/B Testing"])

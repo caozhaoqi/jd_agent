@@ -53,7 +53,31 @@
 - **Unicode 文件名支持**: 完美支持中文字符的文件名编码。
 - **流式内容生成**: 实时生成报告内容，支持大文件处理。
 
-### � 7. 智能日志系统
+### 📈 7. 性能监控与仪表盘 (Performance Monitoring)
+- **系统资源监控**: 实时监控 CPU、内存、磁盘和网络使用情况
+- **API 性能监控**: 跟踪 API 请求响应时间、错误率和吞吐量
+- **前端性能监控**: 监控页面加载时间、渲染性能和用户交互响应
+- **可视化仪表盘**: 使用 Grafana 构建实时监控仪表盘，支持自定义视图
+
+### 🔬 8. A/B 测试框架 (A/B Testing)
+- **一致性哈希算法**: 确保用户在测试期间始终看到相同的版本
+- **Redis 存储**: 使用 Redis 管理测试配置和用户分配
+- **ABTestManager 类**: 提供完整的测试生命周期管理
+- **实时数据分析**: 支持实时查看测试结果和统计数据
+
+### 🔗 9. 全链路监控 (Full-Link Monitoring)
+- **分布式追踪**: 基于 OpenTelemetry 实现端到端的请求追踪
+- **系统调用监控**: 监控数据库查询、缓存访问和外部 API 调用
+- **错误定位**: 快速定位系统中的性能瓶颈和错误源
+- **链路可视化**: 可视化展示请求在系统中的完整路径
+
+### 🧠 10. 机器学习缓存预测 (ML Cache Prediction)
+- **RandomForest 模型**: 使用机器学习算法预测缓存命中率
+- **智能缓存策略**: 基于预测结果动态调整缓存策略
+- **性能优化**: 提高缓存效率，减少不必要的数据库查询
+- **自适应学习**: 模型随时间自适应学习，提高预测准确性
+
+### 📝 11. 智能日志系统
 - **前端日志自动保存**: 集成开源日志库 loglevel，自动将前端日志保存到服务器指定目录
 - **日志分级与分类**: 按级别（trace、debug、info、warn、error）和类别（stream、auth、ui、network、state、component、general）组织日志
 - **日志轮转与清理**: 自动管理日志文件大小，超过10MB时轮转，7天后自动清理
@@ -191,12 +215,31 @@ npm run dev
 jd_agent/
 ├── src/
 │   ├── app/                 # 后端应用
-│   │   ├── api/             # FastAPI 路由接口 (Stream, Auth, Audio, Logs, Team, ReportExport)
+│   │   ├── api/             # FastAPI 路由接口
+│   │   │   ├── routers/     # API 路由模块
+│   │   │   │   ├── ab_testing.py     # A/B 测试 API
+│   │   │   │   ├── auth.py           # 认证 API
+│   │   │   │   ├── audio.py          # 音频处理 API
+│   │   │   │   ├── logs.py           # 日志管理 API
+│   │   │   │   ├── report_export.py  # 报告导出 API
+│   │   │   │   ├── stream.py         # 流式响应 API
+│   │   │   │   └── team.py           # 团队管理 API
+│   │   │   └── deps.py       # 依赖注入 (数据库、认证)
 │   │   ├── chains/          # LangChain 原子能力 (Generator, Parser)
-│   │   ├── core/            # 核心配置 (Config, DB, LLM Factory) & 统一错误处理
+│   │   ├── core/            # 核心配置
+│   │   │   ├── config.py     # 系统配置
+│   │   │   ├── db_auth.py    # 数据库配置
+│   │   │   ├── llm_factory.py # LLM 工厂
+│   │   │   ├── metrics.py    # 性能指标 (Prometheus)
+│   │   │   ├── tracing.py    # 分布式追踪 (OpenTelemetry)
+│   │   │   └── utils.py      # 工具函数
 │   │   ├── graph/           # LangGraph 多智能体编排 (Nodes, Workflow) - 含人工介入节点
 │   │   ├── models/          # 数据模型 (User, Resume, Interview, Team, InterviewReport)
-│   │   └── services/        # 业务逻辑层 (LLM Service, Report Export Service)
+│   │   └── services/        # 业务逻辑层
+│   │       ├── ab_test_manager.py # A/B 测试管理器
+│   │       ├── llm_service.py     # LLM 服务
+│   │       ├── ml_cache_predictor.py # 机器学习缓存预测器
+│   │       └── report_service.py  # 报告服务
 │   ├── web/                 # 前端应用
 │   │   └── jd-chat-ui/      # Next.js 前端
 │   │       ├── app/         # 页面组件 (包括日志系统测试页面 /logs)
@@ -207,6 +250,9 @@ jd_agent/
 │   │       └── next.config.js # Next.js 配置文件 (含 API 代理设置)
 │   └── prompts/             # Prompt YAML 模板管理
 ├── logs/                    # 日志文件存储目录 (由后端API创建与管理)
+├── monitoring/              # 监控配置
+│   ├── grafana/             # Grafana 仪表盘配置
+│   └── prometheus/          # Prometheus 配置
 ├── tests/                   # 测试用例
 ├── requirements.txt         # 后端依赖列表
 └── README.md                # 项目文档
@@ -249,6 +295,12 @@ jd_agent/
   - [x] 实现 Unicode 文件名编码支持
   - [x] 创建导出记录管理功能
   - [x] 开发流式内容生成支持
+- [x] **v3.7**: 性能优化与系统监控
+  - [x] 实现性能监控与仪表盘系统
+  - [x] 开发 A/B 测试框架
+  - [x] 构建全链路监控系统
+  - [x] 实现机器学习缓存预测
+  - [x] 修复 ab_testing.py 导入路径错误
 - [ ] **v4.0**: WebRTC 超低延迟通话 (打断式交互)
 - [ ] **v5.0**: 多模态简历分析 (支持图片/PDF 图表读取)
 

@@ -36,6 +36,7 @@ from contextlib import asynccontextmanager
 from core.middleware import LogMiddleware
 from utils.logger import logger
 from core.monitoring import start_system_monitor
+from core.tracing import init_tracing, trace_middleware, instrument_fastapi
 
 # 🔴 导入路由和数据库初始化函数
 from core.db_auth import create_db_and_tables
@@ -62,6 +63,12 @@ async def lifespan(app: FastAPI):
     logger.info("📊 System Startup: Starting System Resource Monitoring...")
     start_system_monitor()
     logger.success("✅ System Resource Monitoring started successfully.")
+
+    # 3. 初始化全链路监控
+    logger.info("🔗 System Startup: Initializing Distributed Tracing...")
+    init_tracing()
+    instrument_fastapi(app)
+    logger.success("✅ Distributed Tracing initialized successfully.")
 
     yield
 
@@ -94,6 +101,9 @@ app.add_middleware(
 
 # 注册日志中间件
 app.add_middleware(LogMiddleware)
+
+# 注册全链路监控中间件
+app.middleware("http")(trace_middleware)
 
 
 # 注册请求验证错误处理器

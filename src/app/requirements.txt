@@ -1,0 +1,43 @@
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-dotenv==1.0.0
+
+# Database
+sqlmodel==0.0.14
+sqlalchemy==2.0.25
+
+# AI & NLP
+langchain==0.1.6
+langchain-openai==0.0.8
+transformers==4.36.2
+sentence-transformers==2.4.0
+huggingface-hub==0.21.4
+torch==2.1.2
+accelerate==0.25.0
+
+# RAG & Vector Database
+chromadb==0.4.24
+faiss-cpu==1.8.0
+pymilvus==2.3.5
+
+# Redis Cache
+redis==5.0.1
+
+# Monitoring & Metrics
+prometheus-client==0.19.0
+opentelemetry-api==1.22.0
+opentelemetry-sdk==1.22.0
+opentelemetry-exporter-otlp==1.22.0
+opentelemetry-instrumentation-fastapi==0.43b0
+opentelemetry-instrumentation-httpx==0.43b0
+opentelemetry-instrumentation-redis==0.43b0
+
+# HTTP Client
+httpx==0.26.0
+
+# Utilities
+python-multipart==0.0.6
+loguru==0.7.2
+pydantic==2.5.3
+pydantic-settings==2.1.0

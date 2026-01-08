@@ -11,6 +11,9 @@ from loguru import logger
 from core.redis_client import RedisClient
 from core.monitoring import cache_hits, cache_misses, cache_queries_total
 
+# 延迟导入机器学习缓存预测器
+# 避免循环导入问题
+
 
 class QueryCache:
     """智能查询缓存类"""
@@ -50,6 +53,9 @@ class QueryCache:
             if cached_result:
                 cache_hits.inc()
                 logger.debug(f"缓存命中: {query[:50]}...")
+                # 记录缓存命中事件到ML预测器
+                from core.ml_cache_predictor import ml_cache_predictor
+                ml_cache_predictor.record_cache_event(query, params, True, cache_key)
                 return cached_result
             
             # Redis未命中，检查相似查询
@@ -57,9 +63,15 @@ class QueryCache:
             similar_result = self._find_similar_query(query, params)
             if similar_result:
                 logger.info(f"相似查询命中: {query[:50]}...")
+                # 记录相似查询命中事件到ML预测器
+                from core.ml_cache_predictor import ml_cache_predictor
+                ml_cache_predictor.record_cache_event(query, params, True, cache_key)
                 return similar_result
             
             logger.debug(f"缓存未命中: {query[:50]}...")
+            # 记录缓存未命中事件到ML预测器
+            from core.ml_cache_predictor import ml_cache_predictor
+            ml_cache_predictor.record_cache_event(query, params, False, cache_key)
             return None
             
         except Exception as e:
@@ -71,15 +83,19 @@ class QueryCache:
         """设置查询结果缓存"""
         try:
             cache_key = self._generate_cache_key(query, params)
-            ttl = ttl or self.default_ttl
+            
+            # 使用ML预测器优化TTL
+            base_ttl = ttl or self.default_ttl
+            from core.ml_cache_predictor import ml_cache_predictor
+            optimized_ttl = ml_cache_predictor.optimize_ttl(query, params, base_ttl)
             
             # 将查询结果添加到Redis缓存
-            success = self.redis_client.set(cache_key, result, expire_seconds=ttl)
+            success = self.redis_client.set(cache_key, result, expire_seconds=optimized_ttl)
             
             if success:
                 # 更新本地查询历史
                 self._update_query_history(query, params, result)
-                logger.debug(f"缓存设置成功: {query[:50]}...")
+                logger.debug(f"缓存设置成功: {query[:50]}..., TTL: {optimized_ttl}秒 (优化前: {base_ttl}秒)")
             
             return success
             

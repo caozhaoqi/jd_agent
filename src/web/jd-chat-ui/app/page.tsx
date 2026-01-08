@@ -4,7 +4,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import clsx from "clsx";
-import { Volume2, VolumeX, PanelRightOpen, PanelRightClose, Database } from "lucide-react";
+import { Volume2, VolumeX, PanelRightOpen, PanelRightClose, Database, Menu, X } from "lucide-react";
 
 import { useSessionStore } from "@/stores/useSessionStore";
 import { useMessageStore } from "@/stores/useMessageStore";
@@ -40,6 +40,7 @@ export default function Home() {
   const [dashboardData, setDashboardData] = useState<DashboardState>({
     currentStep: "", userProfile: [], ragSources: []
   });
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   // --- Core Logic Hook ---
   const { sendMessage } = useChatStream({
@@ -98,12 +99,33 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen bg-[#f9fafb] text-gray-800 font-sans overflow-hidden">
-      <Sidebar mode={mode as ChatMode} setMode={handleModeChange} />
+    <div className="flex h-screen bg-[#f9fafb] text-gray-800 font-sans overflow-hidden relative">
+      {/* 移动端侧边栏遮罩 */}
+      {showMobileSidebar && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden" 
+          onClick={() => setShowMobileSidebar(false)}
+        />
+      )}
+
+      {/* 侧边栏 */}
+      <div className={clsx(
+        "fixed md:relative z-30 transition-transform duration-300 ease-in-out",
+        showMobileSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
+        <Sidebar mode={mode as ChatMode} setMode={handleModeChange} />
+      </div>
 
       <div className="flex-1 flex flex-col h-full bg-white min-w-0 relative">
         <div className="h-14 border-b flex items-center justify-between px-4 flex-shrink-0">
           <div className="flex items-center gap-3">
+            {/* 移动端菜单按钮 */}
+            <button 
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+              onClick={() => setShowMobileSidebar(true)}
+            >
+              <Menu size={20} />
+            </button>
             <span className="font-bold text-lg text-gray-800">
               {currentSessionId ? `会话 #${currentSessionId}` : (mode === 'rag' ? '知识库问答' : '新会话')}
             </span>
@@ -150,8 +172,19 @@ export default function Home() {
         />
       </div>
 
-      <div className={clsx("bg-[#fcfdfd] border-l border-gray-200 transition-all duration-300 ease-in-out flex flex-col", showDashboard ? "w-[300px] md:w-[350px] translate-x-0" : "w-0 translate-x-full overflow-hidden border-none")}>
-        <div className="p-4 border-b border-gray-100 font-bold text-sm text-gray-700">🧠 Agent 状态监控</div>
+      <div className={clsx(
+        "bg-[#fcfdfd] border-l border-gray-200 transition-all duration-300 ease-in-out flex flex-col fixed right-0 top-0 h-full z-30", 
+        showDashboard ? "w-[250px] md:w-[350px] translate-x-0" : "w-0 translate-x-full overflow-hidden border-none"
+      )}>
+        <div className="p-4 border-b border-gray-100 font-bold text-sm text-gray-700 flex justify-between items-center">
+          🧠 Agent 状态监控
+          <button 
+            className="md:hidden p-1 rounded hover:bg-gray-100"
+            onClick={() => setShowDashboard(false)}
+          >
+            <X size={16} />
+          </button>
+        </div>
         <BrainDashboard data={dashboardData} />
       </div>
     </div>
