@@ -262,7 +262,7 @@ async def get_performance_metrics():
     
     return {
         "api": {
-            "total_requests": sum(api_requests_total._metrics.values()),
+            "total_requests": sum(metric._value.get() for metric in api_requests_total._metrics.values()) if hasattr(api_requests_total, '_metrics') else 0,
             "avg_duration": api_request_duration_seconds.observe if hasattr(api_request_duration_seconds, 'observe') else 0
         },
         "cache": {
@@ -270,7 +270,7 @@ async def get_performance_metrics():
             "misses": cache_misses._value.get() if hasattr(cache_misses, '_value') else 0
         },
         "llm": {
-            "total_calls": sum(llm_calls_total._metrics.values()),
+            "total_calls": sum(metric._value.get() for metric in llm_calls_total._metrics.values()) if hasattr(llm_calls_total, '_metrics') else 0,
             "avg_duration": llm_call_duration_seconds.observe if hasattr(llm_call_duration_seconds, 'observe') else 0
         }
     }

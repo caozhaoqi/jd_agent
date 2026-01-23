@@ -90,8 +90,9 @@ class FileLogger {
       this.info('general', `成功保存 ${logsToSave.length} 条日志到服务器`);
     } catch (error) {
       this.error('general', '保存日志到服务器失败', { error });
+      console.error('保存日志到服务器失败:', error);
       // 恢复日志数组
-      this.logs = this.logs;
+      // this.logs = [...logsToSave];
     }
   }
   

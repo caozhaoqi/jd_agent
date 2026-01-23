@@ -196,7 +196,7 @@ async def create_export(
             messages_result = await db.execute(
                 select(ChatMessage)
                 .where(ChatMessage.session_id == request.session_id)
-                .order_by(ChatMessage.created_at)
+                .order_by(ChatMessage.id)
             )
             messages = messages_result.scalars().all()
             

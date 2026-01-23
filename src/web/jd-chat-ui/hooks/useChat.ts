@@ -475,24 +475,64 @@ export function useChatStream({
       let url = "";
       let body: any = {};
 
-      // 路由逻辑
-      console.log("🚀 [Frontend] Sending request:", { mode, currentSessionId });
+      // 智能分流逻辑：检测是否为JD内容
+      const isJdContent = (text: string) => {
+        const jdKeywords = [
+          '岗位职责', '工作内容', '职位描述', '任职要求', '招聘要求', 
+          'job description', 'responsibilities', 'requirements', 'qualifications',
+          '岗位要求', '工作要求', '技能要求', '经验要求', '学历要求',
+          '薪资', '福利', '待遇', '工作地点', '工作时间', '岗位职责',
+          'Responsibilities', 'Requirements', 'Qualifications', 'Job Description'
+        ];
+        const textLower = text.toLowerCase();
+        return jdKeywords.some(keyword => textLower.includes(keyword.toLowerCase()));
+      };
+
+      const detectedIsJd = isJdContent(text);
+      console.log("🤖 [Smart Routing] 内容检测结果:", { detectedIsJd, textLength: text.length });
+
+      // 路由逻辑：如果不是职位相关内容，直接交给LLM处理
+      console.log("🚀 [Frontend] Sending request:", { mode, currentSessionId, detectedIsJd });
       if (mode === 'rag') {
         url = `${API_BASE}/qa/qa/stream`;  // 使用流式RAG端点
         body = { question: messageContent };
         console.log("🚀 [Frontend] Using RAG stream endpoint:", url);
+      } else if (mode === 'mock') {
+        // 模拟面试模式：使用专门的模拟面试端点
+        url = `${API_BASE}/interview/mock-interview/stream`;
+        body = { jd_text: messageContent };
+        console.log("🚀 [Frontend] Using mock interview endpoint:", url);
       } else if (currentSessionId) {
         url = `${API_BASE}/chat/stream`;
         body = { session_id: currentSessionId, content: messageContent };
         console.log("🚀 [Frontend] Using chat stream endpoint:", url);
-      } else if (mode === 'guide') {
+      } else if (detectedIsJd) {
+        // 只有当检测到是JD内容时，才使用JD guide端点
         url = `${API_BASE}/jd/generate-guide`;
         body = { jd_text: messageContent };
-        console.log("🚀 [Frontend] Using JD guide endpoint:", url);
+        console.log("🚀 [Frontend] Using JD guide endpoint for JD content:", url);
       } else {
-        url = `${API_BASE}/interview/mock-interview/stream`;
-        body = { jd_text: messageContent };
-        console.log("🚀 [Frontend] Using interview stream endpoint:", url);
+        // 非职位相关内容：直接交给LLM处理
+        url = `${API_BASE}/chat/stream`;
+        // 创建新会话
+        const createSessionRes = await fetch(`${API_BASE}/chat/history/sessions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ title: text.substring(0, 50) })
+        });
+        
+        if (createSessionRes.ok) {
+          const newSession = await createSessionRes.json();
+          console.log("🚀 [Frontend] Created new session for general content:", newSession);
+          setCurrentSessionId(newSession.id);
+          body = { session_id: newSession.id, content: messageContent };
+        } else {
+          // 如果创建会话失败，使用RAG端点作为 fallback
+          url = `${API_BASE}/qa/qa/stream`;
+          body = { question: messageContent };
+          console.log("🚀 [Frontend] Using RAG stream endpoint as fallback for general content:", url);
+        }
+        console.log("🚀 [Frontend] Using chat stream endpoint for general content:", url);
       }
 
       console.log("🚀 [Frontend] Final request details:", {

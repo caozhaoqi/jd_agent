@@ -28,23 +28,24 @@ def get_interviewer_chain(interview_type: str = "comprehensive"):
     role = interviewer_roles.get(interview_type, "综合面试官")
     q_type = question_types.get(interview_type, "面试问题")
 
-    prompt = ChatPromptTemplate.from_template(
-        """
-        你是一位严厉但专业的{role}。
+    # 直接将role和q_type嵌入到提示模板中，而不是作为模板变量
+    prompt_template = f"""
+    你是一位严厉但专业的{role}。
 
-        【岗位 JD】：
-        {jd_text}
+    【岗位 JD】：
+    {{jd_text}}
 
-        【当前面试进展】：
-        {history}
+    【当前面试进展】：
+    {{history}}
 
-        请根据 JD 和刚才的对话，向候选人提出**下一个**{q_type}。
-        要求：
-        1. 问题要简短有力，不要废话。
-        2. 如果候选人上一题回答得不好，可以追问；如果回答得好，进入下一个相关要点。
-        3. 只需要输出问题本身，不要输出 "好的"、"下一题" 等前缀。
-        """
-    )
+    请根据 JD 和刚才的对话，向候选人提出**下一个**{q_type}。
+    要求：
+    1. 问题要简短有力，不要废话。
+    2. 如果候选人上一题回答得不好，可以追问；如果回答得好，进入下一个相关要点。
+    3. 只需要输出问题本身，不要输出 "好的"、"下一题" 等前缀。
+    """
+
+    prompt = ChatPromptTemplate.from_template(prompt_template)
     return prompt | llm | StrOutputParser()
 
 

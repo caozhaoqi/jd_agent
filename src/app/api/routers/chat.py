@@ -48,6 +48,27 @@ def get_messages(
     return chat.messages
 
 
+@router.post("/history/sessions")
+def create_session(
+    title: str,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """创建新的会话"""
+    try:
+        new_session = ChatSession(
+            user_id=user.id,
+            title=title
+        )
+        session.add(new_session)
+        session.commit()
+        session.refresh(new_session)
+        return new_session
+    except Exception as e:
+        logger.error(f"创建会话失败: {e}")
+        raise_internal_error("创建会话失败", exc=e)
+
+
 @router.post("/stream")
 async def stream_chat(
     req: ChatRequest,

@@ -112,7 +112,7 @@ class ChatMessage(SQLModel, table=True):
     session_id: int = Field(foreign_key="chatsession.id")
     role: str  # "user" or "assistant"
     content: str
-    created_at: datetime = Field(default_factory=datetime.now)
+    # created_at: datetime = Field(default_factory=datetime.now)
     session: Optional[ChatSession] = Relationship(back_populates="messages")
 
 

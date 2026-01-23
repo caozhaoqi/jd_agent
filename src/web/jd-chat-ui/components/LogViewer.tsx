@@ -23,6 +23,9 @@ export default function LogViewer() {
   const [serverLogs, setServerLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [logStats, setLogStats] = useState(logger.getStats());
+  const [showServerLogs, setShowServerLogs] = useState(false);
+  const [latestServerLogs, setLatestServerLogs] = useState<any[]>([]);
+  const [serverLogsLoading, setServerLogsLoading] = useState(false);
 
   // 获取日志
   useEffect(() => {
@@ -38,6 +41,44 @@ export default function LogViewer() {
     
     return () => clearInterval(interval);
   }, []);
+
+  // 获取服务器日志
+  const fetchServerLogs = async () => {
+    setServerLogsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/logs/list`);
+      const data = await response.json();
+      
+      if (data.status === 'success' && data.files && data.files.length > 0) {
+        // 获取最新日志文件
+        const latestLogFile = data.files[0];
+        
+        const downloadResponse = await fetch(`${API_BASE}/logs/download/${latestLogFile.filename}`);
+        const downloadData = await downloadResponse.json();
+        
+        if (downloadData.status === 'success') {
+          try {
+            const logsData = downloadData.content;
+            setLatestServerLogs(Array.isArray(logsData) ? logsData : []);
+          } catch (error) {
+            console.error('解析服务器日志失败:', error);
+            setLatestServerLogs([]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('获取服务器日志失败:', error);
+    } finally {
+      setServerLogsLoading(false);
+    }
+  };
+
+  // 当用户切换到服务器日志视图时，自动获取服务器日志
+  useEffect(() => {
+    if (showServerLogs) {
+      fetchServerLogs();
+    }
+  }, [showServerLogs]);
 
   // 应用过滤
   useEffect(() => {
@@ -152,9 +193,20 @@ export default function LogViewer() {
 
   return (
     <div className="p-4 border rounded-lg bg-white dark:bg-gray-800 shadow-md">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
         <h2 className="text-xl font-bold">日志查看器</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center">
+            <span className="mr-2">查看模式:</span>
+            <select 
+              value={showServerLogs ? 'server' : 'local'}
+              onChange={(e) => setShowServerLogs(e.target.value === 'server')}
+              className="px-2 py-1 border rounded"
+            >
+              <option value="local">本地日志</option>
+              <option value="server">服务器日志</option>
+            </select>
+          </div>
           <button 
             onClick={() => setShowFilters(!showFilters)}
             className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -167,6 +219,15 @@ export default function LogViewer() {
           >
             清空日志
           </button>
+          {showServerLogs && (
+            <button 
+              onClick={fetchServerLogs}
+              disabled={serverLogsLoading}
+              className="px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
+            >
+              {serverLogsLoading ? '刷新中...' : '刷新服务器日志'}
+            </button>
+          )}
         </div>
       </div>
       
@@ -293,42 +354,96 @@ export default function LogViewer() {
         </div>
       </div>
       
-      <div className="max-h-96 overflow-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700">
-              <th className="border p-2 text-left">时间</th>
-              <th className="border p-2 text-left">级别</th>
-              <th className="border p-2 text-left">类别</th>
-              <th className="border p-2 text-left">消息</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredLogs.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="border p-2 text-center">没有找到匹配的日志</td>
-              </tr>
-            ) : (
-              filteredLogs.slice().reverse().map((log, index) => (
-                <tr key={index} className={`${log.level === 'error' ? 'bg-red-50 dark:bg-red-900' : ''} ${log.level === 'warn' ? 'bg-yellow-50 dark:bg-yellow-900' : ''}`}>
-                  <td className="border p-2 text-xs">{formatTimestamp(log.timestamp)}</td>
-                  <td className="border p-2 text-xs">
-                    <span className={`px-2 py-1 rounded text-white text-xs ${
-                      log.level === 'error' ? 'bg-red-500' : 
-                      log.level === 'warn' ? 'bg-yellow-500' : 
-                      log.level === 'info' ? 'bg-blue-500' : 
-                      log.level === 'debug' ? 'bg-green-500' : 'bg-gray-500'
-                    }`}>
-                      {log.level.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="border p-2 text-xs">{log.category}</td>
-                  <td className="border p-2 text-xs">{log.message}</td>
+<div className="h-[600px] overflow-y-auto border rounded-md p-2 bg-white">
+        {showServerLogs ? (
+          serverLogsLoading ? (
+            <div className="flex justify-center items-center h-[600px]">
+              <p>加载服务器日志中...</p>
+            </div>
+          ) : latestServerLogs.length === 0 ? (
+            <div className="flex justify-center items-center h-[600px]">
+              <p>没有找到服务器日志</p>
+            </div>
+          ) : (
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-gray-700 sticky top-0 z-10">
+                  <th className="border p-2 text-left">时间</th>
+                  <th className="border p-2 text-left">级别</th>
+                  <th className="border p-2 text-left">类别</th>
+                  <th className="border p-2 text-left">消息</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {latestServerLogs.length > 0 ? (
+                  latestServerLogs.slice().reverse().map((log, index) => (
+                    <tr key={index} className={`${log.level === 'error' ? 'bg-red-50 dark:bg-red-900' : ''} ${log.level === 'warn' ? 'bg-yellow-50 dark:bg-yellow-900' : ''}`}>
+                      <td className="border p-2 text-xs">{formatTimestamp(log.timestamp)}</td>
+                      <td className="border p-2 text-xs">
+                        <span className={`px-2 py-1 rounded text-white text-xs ${
+                          log.level === 'error' ? 'bg-red-500' : 
+                          log.level === 'warn' ? 'bg-yellow-500' : 
+                          log.level === 'info' ? 'bg-blue-500' : 
+                          log.level === 'debug' ? 'bg-green-500' : 'bg-gray-500'
+                        }`}>
+                          {log.level.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="border p-2 text-xs">{log.category}</td>
+                      <td className="border p-2 text-xs">{log.message}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="border p-2 text-center">没有找到服务器日志</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )
+        ) : (
+          filteredLogs.length === 0 ? (
+            <div className="flex justify-center items-center h-[600px]">
+              <p>没有找到匹配的日志</p>
+            </div>
+          ) : (
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-gray-700 sticky top-0 z-10">
+                  <th className="border p-2 text-left">时间</th>
+                  <th className="border p-2 text-left">级别</th>
+                  <th className="border p-2 text-left">类别</th>
+                  <th className="border p-2 text-left">消息</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLogs.length > 0 ? (
+                  filteredLogs.slice().reverse().map((log, index) => (
+                    <tr key={index} className={`${log.level === 'error' ? 'bg-red-50 dark:bg-red-900' : ''} ${log.level === 'warn' ? 'bg-yellow-50 dark:bg-yellow-900' : ''}`}>
+                      <td className="border p-2 text-xs">{formatTimestamp(log.timestamp)}</td>
+                      <td className="border p-2 text-xs">
+                        <span className={`px-2 py-1 rounded text-white text-xs ${
+                          log.level === 'error' ? 'bg-red-500' : 
+                          log.level === 'warn' ? 'bg-yellow-500' : 
+                          log.level === 'info' ? 'bg-blue-500' : 
+                          log.level === 'debug' ? 'bg-green-500' : 'bg-gray-500'
+                        }`}>
+                          {log.level.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="border p-2 text-xs">{log.category}</td>
+                      <td className="border p-2 text-xs">{log.message}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="border p-2 text-center">没有找到匹配的日志</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )
+        )}
       </div>
     </div>
   );

@@ -170,6 +170,18 @@ export default function Home() {
                 <span className="hidden sm:inline">{isTTSEnabled ? '语音已开启' : '语音已关闭'}</span>
               </button>
               <button 
+                onClick={() => router.push('/dashboard')}
+                className={clsx("flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all border",
+                  "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                )}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="9" y1="21" x2="9" y2="9" />
+                </svg> <span className="hidden sm:inline">查看大屏</span>
+              </button>
+              <button 
                 onClick={() => setShowDashboard(!showDashboard)}
                 className="p-2 rounded-lg hover:bg-[#f1f5f9] text-[#64748b] transition-colors"
               >

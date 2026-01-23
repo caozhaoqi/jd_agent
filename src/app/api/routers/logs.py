@@ -32,12 +32,13 @@ MAX_LOG_FILE_SIZE = 10
 LOG_RETENTION_DAYS = 7
 
 @router.post("/save", status_code=status.HTTP_200_OK)
-async def save_logs(request: Request, logs_request: LogsRequest):
+async def save_logs(request: Request):
     """保存前端日志到服务器文件系统"""
     try:
-        # 获取日志数据
-        logs = logs_request.logs
-        timestamp = logs_request.timestamp
+        # 直接从请求体获取原始数据
+        request_data = await request.json()
+        logs = request_data.get('logs', [])
+        timestamp = request_data.get('timestamp', datetime.now().isoformat())
         
         # 记录保存请求
         print(f"收到日志保存请求: {len(logs)} 条日志, 时间: {timestamp}")
@@ -58,8 +59,24 @@ async def save_logs(request: Request, logs_request: LogsRequest):
                 print(f"日志文件 {filepath} 格式错误，将创建新文件")
                 existing_logs = []
         
+        # 验证并清理日志数据
+        valid_logs = []
+        for log in logs:
+            try:
+                # 确保日志条目包含必要的字段
+                if isinstance(log, dict) and all(key in log for key in ['timestamp', 'level', 'category', 'message']):
+                    valid_logs.append(log)
+                else:
+                    print(f"无效的日志条目: {log}")
+            except Exception as e:
+                print(f"处理日志条目失败: {e}")
+                # 如果处理失败，跳过该日志条目
+                continue
+        
+        print(f"成功验证 {len(valid_logs)} 条日志，跳过 {len(logs) - len(valid_logs)} 条")
+        
         # 合并日志
-        combined_logs = existing_logs + logs
+        combined_logs = existing_logs + valid_logs
         
         # 检查文件大小，如果太大则进行轮转
         if os.path.exists(filepath):
@@ -75,17 +92,31 @@ async def save_logs(request: Request, logs_request: LogsRequest):
                 print(f"日志文件已轮转: {filepath} -> {rotated_filepath}")
         
         # 写入文件
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(combined_logs, f, ensure_ascii=False, indent=2)
-        
-        print(f"成功保存 {len(logs)} 条日志到 {filepath}")
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(combined_logs, f, ensure_ascii=False, indent=2)
+            print(f"成功保存 {len(valid_logs)} 条日志到 {filepath}")
+        except Exception as e:
+            print(f"写入日志文件失败: {e}")
+            # 如果写入失败，尝试保存为更简单的格式
+            try:
+                # 只保存前10条日志，避免过大
+                simple_logs = combined_logs[:10]
+                simple_filepath = os.path.join(LOG_DIR, f"frontend-logs-{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                with open(simple_filepath, "w", encoding="utf-8") as f:
+                    json.dump(simple_logs, f, ensure_ascii=False, indent=2)
+                print(f"使用简化格式保存了 {len(simple_logs)} 条日志到 {simple_filepath}")
+            except Exception as e2:
+                print(f"简化格式保存也失败: {e2}")
+                # 如果所有保存都失败，只记录到控制台
+                print(f"无法保存日志，将只记录到控制台: {len(combined_logs)} 条日志")
         
         # 清理旧日志文件
         cleanup_old_logs()
         
         return {
             "status": "success",
-            "message": f"成功保存 {len(logs)} 条日志",
+            "message": f"成功保存 {len(valid_logs)} 条日志",
             "filepath": filepath
         }
     
@@ -155,10 +186,17 @@ async def download_log_file(filename: str):
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
         
+        # 解析JSON内容
+        try:
+            parsed_content = json.loads(content)
+        except json.JSONDecodeError:
+            print(f"解析日志文件 {filepath} 失败")
+            parsed_content = []
+        
         return {
             "status": "success",
             "filename": filename,
-            "content": content,
+            "content": parsed_content,
             "size": os.path.getsize(filepath),
             "modified": datetime.fromtimestamp(os.path.getmtime(filepath)).isoformat()
         }
