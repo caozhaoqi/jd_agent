@@ -38,51 +38,107 @@ export default function Sidebar({ mode, setMode }: SidebarProps) {
   };
 
   return (
-    <div className="w-[260px] bg-[#fcfdfd] border-r border-gray-200 hidden md:flex flex-col flex-shrink-0">
-      <div className="p-4 space-y-2">
-        <div className="bg-gray-100 p-1 rounded-lg flex text-sm mb-4">
+    <div className="w-[280px] bg-white border-r border-[#e2e8f0] hidden md:flex flex-col flex-shrink-0 h-full shadow-md">
+      {/* 顶部模式切换和新建会话 */}
+      <div className="p-4 space-y-4">
+        {/* 模式切换 */}
+        <div className="bg-[#f8fafc] p-1.5 rounded-xl flex text-sm">
           <button
             onClick={() => setMode('guide')}
-            className={clsx("flex-1 py-1.5 rounded-md transition-all flex justify-center gap-2", mode === 'guide' ? "bg-white shadow text-blue-600 font-bold" : "text-gray-500")}
+            className={clsx(
+              "flex-1 py-2 rounded-lg transition-all flex justify-center gap-2 items-center",
+              mode === 'guide'
+                ? "bg-white shadow-sm text-[#3b82f6] font-semibold"
+                : "text-[#64748b] hover:bg-[#f1f5f9]"
+            )}
           >
-            <LayoutDashboard size={14} /> JD 分析
+            <LayoutDashboard size={14} />
+            <span>JD 分析</span>
           </button>
           <button
             onClick={() => setMode('mock')}
-            className={clsx("flex-1 py-1.5 rounded-md transition-all flex justify-center gap-2", mode === 'mock' ? "bg-white shadow text-purple-600 font-bold" : "text-gray-500")}
+            className={clsx(
+              "flex-1 py-2 rounded-lg transition-all flex justify-center gap-2 items-center",
+              mode === 'mock'
+                ? "bg-white shadow-sm text-[#8b5cf6] font-semibold"
+                : "text-[#64748b] hover:bg-[#f1f5f9]"
+            )}
           >
-            <Mic size={14} /> 模拟面试
+            <Mic size={14} />
+            <span>模拟面试</span>
           </button>
         </div>
-        <button onClick={handleNewChat} className="w-full py-2 bg-blue-50 text-blue-600 rounded-md text-sm font-medium border border-blue-100 flex justify-center items-center gap-2">
-          <Plus size={16} /> 新建会话
+        
+        {/* 新建会话按钮 */}
+        <button 
+          onClick={handleNewChat} 
+          className="w-full py-3 bg-[#3b82f6] text-white rounded-xl text-sm font-semibold flex justify-center items-center gap-2 hover:bg-[#2563eb] transition-colors shadow-md hover:shadow-lg"
+        >
+          <Plus size={18} />
+          <span>新建会话</span>
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 scrollbar-thin">
-        {sessions.map(s => (
-          <div key={s.id} onClick={() => handleLoadSession(s.id)} className={clsx("px-3 py-2.5 text-sm rounded-md cursor-pointer mb-1 truncate flex items-center gap-2", currentSessionId === s.id ? "bg-gray-100 font-medium" : "hover:bg-gray-50 text-gray-600")}>
-            <MessageSquare size={14} /> {s.title}
+      {/* 会话列表 */}
+      <div className="flex-1 overflow-y-auto px-3 space-y-1">
+        <h3 className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wider mb-2 px-3 py-1">
+          历史会话
+        </h3>
+        {sessions.length === 0 ? (
+          <div className="text-center py-12 text-[#94a3b8]">
+            <MessageSquare size={24} className="mx-auto mb-2 opacity-50" />
+            <p className="text-sm">暂无历史会话</p>
           </div>
-        ))}
+        ) : (
+          sessions.map(s => (
+            <div 
+              key={s.id} 
+              onClick={() => handleLoadSession(s.id)} 
+              className={clsx(
+                "px-3 py-3 rounded-lg cursor-pointer truncate flex items-center gap-3 transition-all",
+                currentSessionId === s.id
+                  ? "bg-[#eff6ff] text-[#1e40af] font-medium"
+                  : "hover:bg-[#f1f5f9] text-[#475569]"
+              )}
+            >
+              <MessageSquare size={16} className={currentSessionId === s.id ? "text-[#3b82f6]" : "text-[#94a3b8]"} />
+              <span className="truncate flex-1">{s.title}</span>
+            </div>
+          ))
+        )}
       </div>
 
-      <div className="p-4 border-t space-y-2">
+      {/* 底部操作区 */}
+      <div className="p-4 border-t border-[#e2e8f0] space-y-3">
         <button
           onClick={navigateToTeam}
-          className="w-full py-2 bg-gray-50 text-gray-700 rounded-md text-sm font-medium flex justify-center items-center gap-2 hover:bg-gray-100 transition-colors"
+          className="w-full py-3 bg-[#f8fafc] text-[#475569] rounded-xl text-sm font-medium flex justify-center items-center gap-2 hover:bg-[#f1f5f9] transition-colors border border-[#e2e8f0]"
         >
-          <Users size={16} /> 团队管理
+          <Users size={16} />
+          <span>团队管理</span>
         </button>
         <button
           onClick={navigateToReport}
-          className="w-full py-2 bg-gray-50 text-gray-700 rounded-md text-sm font-medium flex justify-center items-center gap-2 hover:bg-gray-100 transition-colors"
+          className="w-full py-3 bg-[#f8fafc] text-[#475569] rounded-xl text-sm font-medium flex justify-center items-center gap-2 hover:bg-[#f1f5f9] transition-colors border border-[#e2e8f0]"
         >
-          <FileText size={16} /> 报告导出
+          <FileText size={16} />
+          <span>报告导出</span>
         </button>
-        <div className="pt-2 border-t flex justify-between items-center text-sm text-gray-600">
-          <span className="font-bold">{username}</span>
-          <LogOut size={16} className="cursor-pointer hover:text-red-500" onClick={logout}/>
+        
+        {/* 用户信息和退出 */}
+        <div className="pt-3 border-t border-[#e2e8f0] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-[#3b82f6] rounded-full flex items-center justify-center text-white font-semibold">
+              {username ? username.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <span className="font-medium text-[#1e293b] text-sm">{username || '用户'}</span>
+          </div>
+          <button 
+            onClick={logout}
+            className="p-2 rounded-lg text-[#94a3b8] hover:bg-[#f1f5f9] hover:text-[#ef4444] transition-colors"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </div>
     </div>

@@ -7,7 +7,7 @@ import uuid
 import pyttsx3
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, WebSocket
 from core.error_handler import (
     raise_bad_request,
     raise_internal_error,
@@ -17,6 +17,16 @@ from fastapi.responses import Response
 from loguru import logger
 from core.config import settings
 from core.models import TTSRequest
+import queue
+
+# 尝试导入可选依赖
+try:
+    import sounddevice as sd
+    import numpy as np
+    SOUNDDEVICE_AVAILABLE = True
+except ImportError:
+    logger.warning("sounddevice not available, using basic audio processing")
+    SOUNDDEVICE_AVAILABLE = False
 
 router = APIRouter()
 
@@ -26,6 +36,84 @@ try:
         engine = pyttsx3.init()
 except Exception as e:
     logger.error(f"pyttsx3 init failed: {e}")
+
+# 音频队列管理
+class AudioQueueManager:
+    def __init__(self):
+        self.queue = queue.Queue()
+        self.is_playing = False
+        self.current_task = None
+        self.lock = asyncio.Lock()
+    
+    async def add_to_queue(self, audio_data, mime_type):
+        """添加音频到队列"""
+        self.queue.put((audio_data, mime_type))
+        if not self.is_playing:
+            await self.process_queue()
+    
+    async def process_queue(self):
+        """处理音频队列"""
+        async with self.lock:
+            if self.is_playing or self.queue.empty():
+                return
+            
+            self.is_playing = True
+            try:
+                while not self.queue.empty():
+                    audio_data, mime_type = self.queue.get()
+                    # 播放音频
+                    await self.play_audio(audio_data, mime_type)
+                    self.queue.task_done()
+            finally:
+                self.is_playing = False
+    
+    async def play_audio(self, audio_data, mime_type):
+        """播放音频"""
+        # 这里可以添加音频播放逻辑
+        # 目前使用临时文件的方式，后续可以优化为内存播放
+        pass
+    
+    def clear_queue(self):
+        """清空队列"""
+        while not self.queue.empty():
+            self.queue.get()
+            self.queue.task_done()
+
+# 创建全局音频队列管理器
+audio_queue = AudioQueueManager()
+
+# 音频活跃度检测
+class VADDetector:
+    def __init__(self):
+        self.silence_threshold = 0.01
+        self.speech_frames = 0
+        self.speech_threshold = 10
+    
+    def detect(self, audio_data):
+        """检测音频活跃度"""
+        if SOUNDDEVICE_AVAILABLE and 'np' in globals():
+            try:
+                # 将音频数据转换为numpy数组
+                audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                # 计算音量
+                volume = np.sqrt(np.mean(audio_array ** 2))
+                
+                if volume > self.silence_threshold:
+                    self.speech_frames += 1
+                else:
+                    self.speech_frames = max(0, self.speech_frames - 1)
+                
+                return self.speech_frames > self.speech_threshold
+            except Exception as e:
+                logger.warning(f"VAD detection failed: {e}")
+                return False
+        else:
+            # 基本实现：基于音频长度和能量
+            # 简单判断：音频长度大于一定阈值认为是语音
+            return len(audio_data) > 10000
+
+# 创建全局VAD检测器
+vad_detector = VADDetector()
 
 
 @router.post("/transcribe")
@@ -59,21 +147,72 @@ async def transcribe_audio(file: UploadFile = File(...)):
             file_content = extract_audio_from_video_bytes(file_content, filename)
             filename = "extracted_audio.wav"
 
-        # 5. 构造 OpenAI SDK 认可的文件元组 (关键修复!)
+        # 5. 音频活跃度检测
+        is_speech = vad_detector.detect(file_content)
+
+        # 6. 构造 OpenAI SDK 认可的文件元组 (关键修复!)
         # 格式: (文件名, 二进制数据, MIME类型)
         file_tuple = (filename, file_content, "audio/wav")
 
-        # 6. 调用 API
+        # 7. 调用 API
         transcript = client.audio.transcriptions.create(
             model=settings.ASR_MODEL,  # 确保 .env 是 FunAudioLLM/SenseVoiceSmall
             file=file_tuple,  # 传入构造好的元组
             temperature=0.0,
         )
-        return {"text": transcript.text}
+        
+        # 8. 如果检测到说话，清空音频队列（打断功能）
+        if is_speech:
+            audio_queue.clear_queue()
+            logger.info("Audio queue cleared due to speech detection")
+        
+        return {"text": transcript.text, "is_speech": is_speech}
 
     except Exception as e:
         logger.debug(f"❌ ASR Error: {e}")
-        return {"text": "", "error": str(e)}
+        return {"text": "", "error": str(e), "is_speech": False}
+
+
+@router.post("/transcribe/stream")
+async def transcribe_audio_stream(file: UploadFile = File(...)):
+    """
+    低延迟语音转文字
+    适用于实时对话场景
+    """
+    from openai import OpenAI
+    from core.config import settings
+
+    # 初始化客户端
+    client = OpenAI(
+        api_key=settings.AUDIO_API_KEY or settings.OPENAI_API_KEY,
+        base_url=settings.AUDIO_API_BASE or settings.OPENAI_API_BASE,
+    )
+
+    try:
+        # 读取文件内容
+        file_content = await file.read()
+        filename = file.filename or "stream.wav"
+
+        # 构造文件元组
+        file_tuple = (filename, file_content, "audio/wav")
+
+        # 调用 API 进行转录
+        transcript = client.audio.transcriptions.create(
+            model=settings.ASR_MODEL,
+            file=file_tuple,
+            temperature=0.0,
+        )
+        
+        # 检测活跃度并打断
+        is_speech = vad_detector.detect(file_content)
+        if is_speech:
+            audio_queue.clear_queue()
+        
+        return {"text": transcript.text, "is_speech": is_speech, "latency": "low"}
+
+    except Exception as e:
+        logger.debug(f"❌ Stream ASR Error: {e}")
+        return {"text": "", "error": str(e), "is_speech": False}
 
 
 @router.post("/tts")
@@ -84,13 +223,8 @@ async def text_to_speech(request: TTSRequest):
     - Windows/Linux: 调用 pyttsx3 -> .wav
     """
     text = request.text
-    """
-    跨平台 TTS 接口 (完全离线，零延迟)
-    - macOS: 调用 'say' 命令 -> .m4a
-    - Windows/Linux: 调用 pyttsx3 -> .wav
-    """
     if not text or not text.strip():
-        raise_bad_request(message="文本为空")
+        raise_bad_request("文本为空")
 
     # 获取当前操作系统名称 ('Darwin', 'Windows', 'Linux')
     system_os = platform.system()
@@ -188,3 +322,77 @@ async def text_to_speech(request: TTSRequest):
         if "output_path" in locals() and os.path.exists(output_path):
             os.remove(output_path)
         raise_internal_error(message="TTS生成失败", exc=e)
+
+
+@router.post("/tts/queue")
+async def text_to_speech_queue(request: TTSRequest):
+    """
+    带队列的 TTS 接口
+    支持音频队列管理和打断功能
+    """
+    text = request.text
+    if not text or not text.strip():
+        raise_bad_request("文本为空")
+
+    # 获取当前操作系统名称
+    system_os = platform.system()
+    unique_id = uuid.uuid4()
+    temp_dir = tempfile.gettempdir()
+
+    try:
+        audio_data = None
+        mime_type = ""
+        output_path = ""
+
+        # 生成音频
+        if system_os == "Darwin":
+            output_path = os.path.join(temp_dir, f"tts_queue_{unique_id}.m4a")
+            mime_type = "audio/mp4"
+
+            process = subprocess.run(
+                ["say", "-o", output_path, text], capture_output=True, text=True
+            )
+            if process.returncode != 0:
+                raise Exception(f"Mac TTS failed: {process.stderr}")
+
+        else:
+            output_path = os.path.join(temp_dir, f"tts_queue_{unique_id}.wav")
+            mime_type = "audio/wav"
+
+            def generate_audio_sync():
+                engine.save_to_file(text, output_path)
+                engine.runAndWait()
+
+            await asyncio.to_thread(generate_audio_sync)
+
+        # 读取音频数据
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            with open(output_path, "rb") as f:
+                audio_data = f.read()
+            os.remove(output_path)
+        else:
+            raise Exception("音频文件生成失败")
+
+        # 添加到队列
+        await audio_queue.add_to_queue(audio_data, mime_type)
+
+        return {"msg": "音频已添加到队列", "queue_length": audio_queue.queue.qsize()}
+
+    except Exception as e:
+        logger.debug(f"❌ [TTS Queue Error] OS: {system_os} | Error: {e}")
+        if "output_path" in locals() and os.path.exists(output_path):
+            os.remove(output_path)
+        raise_internal_error(message="TTS队列添加失败", exc=e)
+
+
+@router.post("/tts/interrupt")
+async def interrupt_tts():
+    """
+    打断当前 TTS 播放
+    """
+    try:
+        audio_queue.clear_queue()
+        return {"msg": "TTS播放已打断", "queue_length": audio_queue.queue.qsize()}
+    except Exception as e:
+        logger.error(f"打断TTS失败: {e}")
+        raise_internal_error(message="打断TTS失败", exc=e)

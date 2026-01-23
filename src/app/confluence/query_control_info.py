@@ -229,7 +229,7 @@ def main():
         print("="*70)
         
         # 保存总结报告到文件
-        with open("../../../control_summary_report.md", "w", encoding="utf-8") as f:
+        with open("../../../other/control_summary_report.md", "w", encoding="utf-8") as f:
             f.write(summary)
         print("\n💾 总结报告已保存到: control_summary_report.md")
     else:

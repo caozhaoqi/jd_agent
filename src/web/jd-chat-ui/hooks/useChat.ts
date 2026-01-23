@@ -1,5 +1,5 @@
 // hooks/useChat.ts
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useMessageStore } from "@/stores/useMessageStore";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { useAudioQueue } from "@/hooks/useAudioQueue";
@@ -44,6 +44,9 @@ export function useChatStream({
   const { token, currentSessionId, setCurrentSessionId, fetchSessions } = useSessionStore();
   const { addMessage, setIsLoading, updateLastMessage, isLoading } = useMessageStore();
   const { addToQueue, stopAudio, unlockAudio } = useAudioQueue({ token, onLogout });
+
+  // 跟踪上传的文件
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{name: string, id: string}>>([]);
 
   const isTTSRef = useRef(isTTSEnabled);
   useEffect(() => {
@@ -279,7 +282,10 @@ export function useChatStream({
                   sessionId: currentSessionId
                 });
                 
-                logger.error('stream', `JSON解析失败: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+                // 安全处理错误消息，避免包含undefined导致的问题
+                const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown error';
+                const safeErrorMsg = errorMsg ? errorMsg.replace(/undefined/g, '未定义') : '未知错误';
+                logger.error('stream', `JSON解析失败: ${safeErrorMsg}`);
                 
                 // 如果 JSON 解析失败，尝试作为普通文本处理
                 if (safeDataStr && !safeDataStr.startsWith("{")) {
@@ -442,6 +448,15 @@ export function useChatStream({
     stopAudio();
     setIsLoading(true); // 开启初始加载动画
 
+    // 构建消息内容，包含上传的文件信息
+    let messageContent = text;
+    if (uploadedFiles.length > 0) {
+      const filesList = uploadedFiles.map(file => `- ${file.name}`).join('\n');
+      messageContent = `[文件列表]\n${filesList}\n\n[问题]\n${text}`;
+      // 发送消息后清空上传文件列表
+      setUploadedFiles([]);
+    }
+
     // 预增加用户消息和助手占位消息
     addMessage({ role: "user", content: text });
     addMessage({
@@ -464,19 +479,19 @@ export function useChatStream({
       console.log("🚀 [Frontend] Sending request:", { mode, currentSessionId });
       if (mode === 'rag') {
         url = `${API_BASE}/qa/qa/stream`;  // 使用流式RAG端点
-        body = { question: text };
+        body = { question: messageContent };
         console.log("🚀 [Frontend] Using RAG stream endpoint:", url);
       } else if (currentSessionId) {
         url = `${API_BASE}/chat/stream`;
-        body = { session_id: currentSessionId, content: text };
+        body = { session_id: currentSessionId, content: messageContent };
         console.log("🚀 [Frontend] Using chat stream endpoint:", url);
       } else if (mode === 'guide') {
         url = `${API_BASE}/jd/generate-guide`;
-        body = { jd_text: text };
+        body = { jd_text: messageContent };
         console.log("🚀 [Frontend] Using JD guide endpoint:", url);
       } else {
         url = `${API_BASE}/interview/mock-interview/stream`;
-        body = { jd_text: text };
+        body = { jd_text: messageContent };
         console.log("🚀 [Frontend] Using interview stream endpoint:", url);
       }
 
@@ -524,5 +539,70 @@ export function useChatStream({
     }
   };
 
-  return { sendMessage };
+  const uploadFile = async (file: File) => {
+    if (!token) return;
+
+    try {
+      setIsLoading(true);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE}/resume/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) onLogout();
+        
+        // 尝试解析错误响应
+        try {
+          const errorData = await res.json();
+          throw new Error(`文件处理失败: ${errorData.message || res.statusText}`);
+        } catch {
+          throw new Error(`文件上传失败: ${res.statusText}`);
+        }
+      }
+
+      const data = await res.json();
+      console.log('文件上传成功:', data);
+      
+      // 生成唯一文件ID并添加到上传文件列表
+      const fileId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setUploadedFiles(prev => [...prev, { name: file.name, id: fileId }]);
+      
+      // 添加成功消息到聊天界面
+      addMessage({ 
+        role: "assistant", 
+        content: `📁 文件上传成功: ${file.name}\n\n${data.msg}${data.new_entries ? `，新增 ${data.new_entries} 条记录` : ''}\n\n提示: 现在你可以针对这个文件提问，我会基于文件内容给你解答。` 
+      });
+
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : "文件上传失败";
+      console.error('文件上传错误:', errorMessage);
+      
+      // 分析错误类型并给出更友好的提示
+      let friendlyMessage = `❌ 文件上传失败: ${errorMessage}`;
+      
+      if (errorMessage.includes('文件内容为空或无法识别')) {
+        friendlyMessage = `⚠️ 文件上传成功，但解析失败: ${file.name}\n\n原因: 文件内容为空或无法识别\n\n建议: 请尝试上传包含实际内容的文件，或检查文件格式是否正确。支持的格式包括：PDF、DOCX、TXT等。`;
+      } else if (errorMessage.includes('不支持的文件格式')) {
+        friendlyMessage = `⚠️ 文件格式不支持: ${file.name}\n\n原因: ${errorMessage}\n\n建议: 请上传支持的文件格式，包括：PDF、DOCX、TXT、JPG、PNG等。`;
+      }
+      
+      // 添加错误消息到聊天界面
+      addMessage({ 
+        role: "assistant", 
+        content: friendlyMessage 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { sendMessage, uploadFile, uploadedFiles };
 }

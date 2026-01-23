@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File
 from sqlmodel import Session, select
 from api.deps import get_current_user, get_session
 from core.models import User, UserProfile, ResumeJDMatchRequest
-from utils.file_parser import parse_resume_file
+from utils.file_parser import parse_resume_file, analyze_resume_multimodal
 from chains.resume_extractor import extract_resume_features
 from chains.resume_jd_matcher import match_resume_with_jd
 from core.error_handler import raise_internal_error, raise_bad_request
@@ -56,6 +56,36 @@ async def upload_resume(
         import traceback
         logger.error(traceback.format_exc())
         raise_internal_error(message="简历处理失败", exc=e)
+
+
+@router.post("/multimodal")
+async def analyze_resume_multimodal_api(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+):
+    """
+    多模态简历分析
+    支持图片、PDF中的图表识别
+    """
+    try:
+        logger.info(f"用户 {user.id} 上传简历进行多模态分析: {file.filename}")
+        analysis_result = await analyze_resume_multimodal(file)
+        logger.info(f"多模态分析完成")
+        
+        # 提取文本内容进行特征提取
+        if analysis_result.get("text"):
+            facts = await extract_resume_features(analysis_result["text"])
+            analysis_result["extracted_features"] = len(facts) if facts else 0
+        
+        return {
+            "msg": "多模态分析成功",
+            "result": analysis_result
+        }
+    except Exception as e:
+        logger.error(f"多模态分析处理失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise_internal_error(message="多模态分析处理失败", exc=e)
 
 
 @router.post("/match")

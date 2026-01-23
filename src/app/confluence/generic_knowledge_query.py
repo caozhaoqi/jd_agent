@@ -342,7 +342,7 @@ def create_ui_template():
 """
     
     # 写入UI模板文件
-    with open("../../../knowledge_query_ui.html", "w", encoding="utf-8") as f:
+    with open("../../../other/knowledge_query_ui.html", "w", encoding="utf-8") as f:
         f.write(ui_html)
     logger.success("✅ UI模板文件创建成功")
 

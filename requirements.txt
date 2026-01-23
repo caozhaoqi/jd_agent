@@ -79,3 +79,23 @@ python-docx>=0.8.11
 # python-docx用于Word文档生成
 beautifulsoup4>=4.12.0
 # beautifulsoup4用于HTML解析
+
+# --- WebRTC (实时通信) ---
+aiortc>=1.4.0
+# aiortc用于WebRTC服务器端实现
+
+# --- Audio Processing (音频处理) ---
+sounddevice>=0.4.6
+# sounddevice用于低延迟音频处理
+
+# --- Image Processing (图像处理) ---
+pillow>=10.0.0
+# pillow用于图像处理
+pytesseract>=0.3.10
+# pytesseract用于OCR文本提取
+opencv-python>=4.8.0
+# opencv-python用于图像处理和图表识别
+
+# --- PDF Processing (PDF处理) ---
+pdfplumber>=0.10.0
+# pdfplumber用于PDF文本和表格提取

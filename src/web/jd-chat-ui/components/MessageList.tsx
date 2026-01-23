@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { Bot, User, Play } from "lucide-react";
+import { Bot, User, Play, LayoutDashboard } from "lucide-react";
 import clsx from "clsx";
 import { Message } from "@/types/chat";
 import ThinkingReveal from "./ThinkingReveal";
@@ -57,32 +57,46 @@ useEffect(() => {
 }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth relative bg-white">
-      <div className="max-w-3xl mx-auto space-y-8 pb-10">
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth relative bg-[#f8fafc]">
+      <div className="max-w-3xl mx-auto space-y-6 pb-12">
         {/* 当消息为空时显示提示 */}
         {messages.length === 0 && !isLoading && !error && (
-          <div className="text-center py-12 space-y-4">
-            <Bot size={48} className="mx-auto text-gray-300" />
-            <h3 className="text-lg font-medium text-gray-800">欢迎使用JD分析助手</h3>
-            <p className="text-gray-500 max-w-md mx-auto">请在下方输入框中粘贴或输入岗位JD内容，我将为您生成详细的岗位分析报告。</p>
+          <div className="text-center py-16 space-y-6">
+            <div className="w-20 h-20 bg-gradient-to-br from-[#3b82f6] to-[#8b5cf6] rounded-2xl flex items-center justify-center mx-auto shadow-xl">
+              <Bot size={40} className="text-white" />
+            </div>
+            <h3 className="text-xl font-bold text-[#1e293b]">欢迎使用 JD Agent</h3>
+            <p className="text-[#64748b] max-w-md mx-auto leading-relaxed">
+              请在下方输入框中粘贴或输入岗位 JD 内容，我将为您生成详细的岗位分析报告和面试准备建议。
+            </p>
+            <div className="mt-4 flex justify-center">
+              <div className="inline-flex items-center gap-2 bg-[#e2e8f0] rounded-full px-4 py-2 text-sm text-[#64748b]">
+                <LayoutDashboard size={16} />
+                <span>支持 JD 分析和模拟面试模式</span>
+              </div>
+            </div>
           </div>
         )}
         
         {messages.map((msg, idx) => (
-          <div key={idx} className={clsx("flex gap-4", msg.role === "user" ? "flex-row-reverse" : "")}>
+          <div key={idx} className={clsx("flex gap-4", msg.role === "user" ? "justify-end" : "justify-start")}>
+            {msg.role === "assistant" && (
+              <div className={clsx(
+                "w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center shadow-md",
+                "bg-gradient-to-br from-[#3b82f6] to-[#8b5cf6] text-white"
+              )}>
+                <Bot size={18} />
+              </div>
+            )}
+            
             <div className={clsx(
-              "w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center border shadow-sm",
-              msg.role === "assistant" ? "bg-white text-blue-600 border-blue-100" : "bg-gray-800 text-white"
-            )}>
-              {msg.role === "assistant" ? <Bot size={18} /> : <User size={18} />}
-            </div>
-
-            <div className={clsx(
-              "max-w-[85%] rounded-2xl px-5 py-3 text-[14px] leading-7 shadow-sm border",
-              msg.role === "user" ? "bg-blue-600 text-white border-blue-500" : "bg-white border-gray-100 text-gray-800"
+              "max-w-[85%] rounded-2xl px-5 py-4 text-[14px] leading-7 shadow-sm",
+              msg.role === "user"
+                ? "bg-[#3b82f6] text-white"
+                : "bg-white border border-[#e2e8f0] text-[#1e293b]"
             )}>
               {msg.role === "assistant" ? (
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-3">
                   {/* 气泡内的思考逻辑 */}
                    <ThinkingReveal
                      thoughts={msg.thoughts || []}
@@ -132,6 +146,15 @@ useEffect(() => {
                 <div className="whitespace-pre-wrap">{msg.content}</div>
               )}
             </div>
+            
+            {msg.role === "user" && (
+              <div className={clsx(
+                "w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center shadow-md",
+                "bg-[#1e293b] text-white"
+              )}>
+                <User size={18} />
+              </div>
+            )}
           </div>
         ))}
 
@@ -148,28 +171,28 @@ useEffect(() => {
 
         {/* 居中大 Loader：仅在 AI 还没出现在列表中时显示 */}
         {shouldShowGlobalLoader && (
-          <div className="flex flex-col items-center justify-center gap-3 py-10 text-blue-500 animate-in fade-in zoom-in-95 duration-300">
+          <div className="flex flex-col items-center justify-center gap-4 py-16 text-[#3b82f6] animate-in fade-in zoom-in-95 duration-300">
             <LoadingIndicator 
               type={loadingType || 'default'} 
               size="large" 
-              message="AI 正在处理请求..." 
+              message="AI 正在分析您的请求..." 
             />
           </div>
         )}
 
         {showStartInterviewBtn && !isLoading && (
-          <div className="flex justify-center mt-4">
+          <div className="flex justify-center mt-8">
             <button
               onClick={onStartMockInterview}
-              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-3 rounded-full shadow-lg hover:scale-105 transition-all font-medium"
+              className="flex items-center gap-3 bg-gradient-to-r from-[#8b5cf6] to-[#3b82f6] text-white px-10 py-4 rounded-full shadow-xl hover:shadow-2xl hover:scale-105 transition-all font-semibold text-sm"
             >
-              <Play size={18} fill="currentColor" />
+              <Play size={20} fill="currentColor" />
               <span>我准备好了，开始模拟面试</span>
             </button>
           </div>
         )}
 
-        <div ref={messagesEndRef} className="h-2" />
+        <div ref={messagesEndRef} className="h-4" />
       </div>
     </div>
   );

@@ -139,4 +139,16 @@ npm install react-syntax-highlighter
 
 ```shell
 pip install faiss-cpu flashrank
+
+```
+
+- ffmpeg
+
+> macos arm64
+
+```shell
+brew install pkg-config ffmpeg
+export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
+export LDFLAGS="-L/opt/homebrew/lib"
+export CFLAGS="-I/opt/homebrew/include"
 ```
