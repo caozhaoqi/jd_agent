@@ -362,7 +362,9 @@ async def agent_feedback(
     description="根据提供的岗位JD启动流式模拟面试，实时返回面试官和候选人的对话过程。",
 )
 async def stream_mock_interview(
-    request: JDRequest, user: User = Depends(get_current_user)
+    request: JDRequest, 
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
 ):
     """
     流式模拟面试接口
@@ -380,11 +382,44 @@ async def stream_mock_interview(
     - role='done': 面试结束信号
     """
     try:
+        # 创建面试会话记录
+        interview_title = f"模拟面试 - {request.interview_type or '综合'}"
+        new_session = ChatSession(title=interview_title, user_id=user.id)
+        db.add(new_session)
+        db.commit()
+        db.refresh(new_session)
+
+        # 保存用户输入的JD文本
+        db.add(
+            ChatMessage(
+                session_id=new_session.id, role="user", content=request.jd_text
+            )
+        )
+        db.commit()
+
+        # 定义一个回调函数，用于保存面试消息
+        async def save_message(role: str, content: str):
+            db.add(
+                ChatMessage(
+                    session_id=new_session.id, role=role, content=content
+                )
+            )
+            db.commit()
+
+        # 启动模拟面试流
         return StreamingResponse(
             run_mock_interview_stream(
-                request.jd_text, interview_type=request.interview_type, rounds=3
+                request.jd_text, 
+                interview_type=request.interview_type, 
+                rounds=3,
+                save_message_callback=save_message
             ),
             media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
         )
     except Exception as e:
         logger.error(f"Mock interview stream error: {e}")

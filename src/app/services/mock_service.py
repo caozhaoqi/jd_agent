@@ -19,7 +19,7 @@ def format_sse(role: str, content: str) -> str:
 
 
 async def run_mock_interview_stream(
-    jd_text: str, interview_type: str = "comprehensive", rounds: int = 3
+    jd_text: str, interview_type: str = "comprehensive", rounds: int = 3, save_message_callback=None
 ):
     """
     生成器函数：控制面试流程并流式输出
@@ -50,14 +50,22 @@ async def run_mock_interview_stream(
         chat_history = []  # 记录上下文
 
         # 3. 开场白
-        yield format_sse("system", "🚀 模拟面试开始！面试官正在阅读简历...")
+        system_message = "🚀 模拟面试开始！面试官正在阅读简历..."
+        yield format_sse("system", system_message)
+        # 保存系统消息
+        if save_message_callback:
+            await save_message_callback("system", system_message)
         await asyncio.sleep(1)
 
         # 4. 循环面试轮次
         for i in range(rounds):
             # --- Round i: 面试官提问 ---
             history_str = "\n".join(chat_history)
-            yield format_sse("system", f"🎤 第 {i + 1} 轮提问中...")
+            system_msg = f"🎤 第 {i + 1} 轮提问中..."
+            yield format_sse("system", system_msg)
+            # 保存系统消息
+            if save_message_callback:
+                await save_message_callback("system", system_msg)
 
             # 面试官思考
             question = await interviewer.ainvoke(
@@ -66,9 +74,16 @@ async def run_mock_interview_stream(
 
             chat_history.append(f"面试官: {question}")
             yield format_sse("interviewer", question)
+            # 保存面试官消息
+            if save_message_callback:
+                await save_message_callback("interviewer", question)
 
             # --- Round i: 候选人回答 ---
-            yield format_sse("system", "🤔 候选人思考中...")
+            system_msg = "🤔 候选人思考中..."
+            yield format_sse("system", system_msg)
+            # 保存系统消息
+            if save_message_callback:
+                await save_message_callback("system", system_msg)
             await asyncio.sleep(1.5)  # 模拟思考时间
 
             # 候选人回答
@@ -76,11 +91,18 @@ async def run_mock_interview_stream(
 
             chat_history.append(f"候选人: {answer}")
             yield format_sse("candidate", answer)
+            # 保存候选人消息
+            if save_message_callback:
+                await save_message_callback("candidate", answer)
 
             await asyncio.sleep(1)
 
         # 5. 生成点评报告 (Planning/Reflection)
-        yield format_sse("system", "👨‍🏫 面试结束，面试官正在撰写评估报告...")
+        system_msg = "👨‍🏫 面试结束，面试官正在撰写评估报告..."
+        yield format_sse("system", system_msg)
+        # 保存系统消息
+        if save_message_callback:
+            await save_message_callback("system", system_msg)
 
         # 将完整的对话记录喂给 Reviewer
         full_history = "\n".join(chat_history)
@@ -88,6 +110,9 @@ async def run_mock_interview_stream(
 
         # 推送点评结果
         yield format_sse("reviewer", review_content)
+        # 保存点评消息
+        if save_message_callback:
+            await save_message_callback("reviewer", review_content)
 
         # 6. 发送结束信号 (一定要放在最后！)
         yield format_sse("done", "[DONE]")

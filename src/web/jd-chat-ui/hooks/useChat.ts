@@ -140,6 +140,18 @@ export function useChatStream({
                 return;
               }
               
+              // 处理模拟面试结束信号
+              try {
+                const doneSignal = JSON.parse(dataStr);
+                if (doneSignal.role === "done" && doneSignal.content === "[DONE]") {
+                  logger.debug('stream', '收到模拟面试结束信号');
+                  updateLastMessage(msg => ({ ...msg, isThinkingFinished: true }));
+                  return;
+                }
+              } catch (e) {
+                // 不是JSON格式的结束信号，继续处理
+              }
+              
               // 跳过空数据行
               if (!dataStr) {
                 logger.debug('stream', '跳过空数据行');
@@ -148,115 +160,172 @@ export function useChatStream({
 
               try {
                 const payload = JSON.parse(dataStr);
-                logger.debug('stream', `解析JSON载荷: ${payload.type}`);
-
-                // 1. 处理结构化监控数据
-                if (payload.type === 'data') {
-                  logger.debug('stream', `接收监控数据: ${payload.key}`);
-                  onDashboardUpdate(payload.key, payload.value);
-                }
-
-                // 2. 处理思考内容 (DeepSeek 风格)
-                else if (payload.type === 'thought') {
-                  logger.debug('stream', `思考内容: ${payload.content?.length || 0} chars`);
-                  
-                  updateLastMessage(msg => {
-                    const updatedMsg = {
-                      ...msg,
-                      isLoading: false,
-                      thoughts: [...(msg.thoughts || []), payload.content],
-                      isThinkingFinished: false,
-                    };
-                    return updatedMsg;
-                  });
-                }
-
-                // 3. 处理报告/结果数据
-                else if (payload.type === 'result') {
-                  console.log("📊 [Result Data] 接收报告/结果数据", {
+                
+                // 处理后端发送的 role 字段格式（模拟面试使用）
+                if (payload.role) {
+                  console.log("🎭 [Role Data] 接收角色数据", {
+                    role: payload.role,
                     hasContent: !!payload.content,
                     contentType: typeof payload.content,
                     sessionId: currentSessionId,
                     timestamp: new Date().toISOString()
                   });
                   
-                  const reportData: ReportData = payload.content;
-                  console.log("📈 [Result Data] 报告数据结构", {
-                    hasMeta: !!reportData.meta,
-                    hasTechQuestions: !!reportData.tech_questions,
-                    techQuestionsCount: reportData.tech_questions?.length || 0,
-                    hasCompanyAnalysis: !!reportData.company_analysis,
-                    sessionIdFromMeta: reportData.meta?.session_id
-                  });
+                  // 处理不同角色的消息
+                  if (payload.content) {
+                    updateLastMessage(msg => {
+                      const newContent = (msg.content || "") + payload.content + "\n";
+                      console.log("📝 [Role Update] 更新消息内容", {
+                        role: payload.role,
+                        oldContentLength: msg.content?.length || 0,
+                        newContentLength: newContent.length,
+                        addedText: payload.content.substring(0, 50)
+                      });
+                      
+                      return {
+                        ...msg,
+                        content: newContent,
+                        isThinkingFinished: payload.role === "done"
+                      };
+                    });
+                  }
                   
-                  updateLastMessage(msg => {
-                    const formattedContent = formatReportToMarkdown(reportData);
-                    console.log("📝 [Result Update] 更新消息为报告内容", {
-                      originalContentLength: msg.content?.length || 0,
-                      newContentLength: formattedContent.length,
-                      isJson: true,
-                      willFinishThinking: true
-                    });
-                    
-                    return {
-                      ...msg,
-                      content: formattedContent,
-                      isJson: true,
-                      isThinkingFinished: true,
-                    };
-                  });
-
-                  if (reportData.meta?.session_id) {
-                    console.log("🔗 [Session Update] 更新会话ID", {
-                      oldSessionId: currentSessionId,
-                      newSessionId: reportData.meta.session_id,
-                      willFetchSessions: true
-                    });
-                    setCurrentSessionId(reportData.meta.session_id);
-                    fetchSessions();
-                    if (onSessionCreated) onSessionCreated(reportData.meta.session_id);
+                  // 处理结束信号
+                  if (payload.role === "done" && payload.content === "[DONE]") {
+                    logger.debug('stream', '收到结束信号');
+                    updateLastMessage(msg => ({ ...msg, isThinkingFinished: true }));
+                    return;
                   }
                 }
+                // 处理前端期望的 type 字段格式
+                else if (payload.type) {
+                  logger.debug('stream', `解析JSON载荷: ${payload.type}`);
 
-                // 4. 处理普通正文 Token
-                else if (payload.type === 'token') {
-                  const tokenContent = payload.content || "";
-                  logger.debug('stream', `Token: ${tokenContent.length} chars`);
-                  
-                  updateLastMessage(msg => {
-                    return {
-                      ...msg,
-                      content: (msg.content || "") + tokenContent,
-                      isThinkingFinished: true
-                    };
-                  });
+                  // 1. 处理结构化监控数据
+                  if (payload.type === 'data') {
+                    logger.debug('stream', `接收监控数据: ${payload.key}`);
+                    onDashboardUpdate(payload.key, payload.value);
+                  }
 
-                  if (isTTSRef.current) {
-                    bufferText += tokenContent;
-                    const sentenceEndRegex = /[。！？\.\!\?\:\n]/;
-                    const isSentenceEnd = sentenceEndRegex.test(tokenContent);
+                  // 2. 处理思考内容 (DeepSeek 风格)
+                  else if (payload.type === 'thought') {
+                    logger.debug('stream', `思考内容: ${payload.content?.length || 0} chars`);
                     
-                    if (isSentenceEnd) {
-                      logger.debug('stream', `TTS添加到队列: ${bufferText.length} chars`);
-                      addToQueue(bufferText);
-                      bufferText = "";
+                    updateLastMessage(msg => {
+                      const updatedMsg = {
+                        ...msg,
+                        isLoading: false,
+                        thoughts: [...(msg.thoughts || []), payload.content],
+                        isThinkingFinished: false,
+                      };
+                      return updatedMsg;
+                    });
+                  }
+
+                  // 3. 处理报告/结果数据
+                  else if (payload.type === 'result') {
+                    console.log("📊 [Result Data] 接收报告/结果数据", {
+                      hasContent: !!payload.content,
+                      contentType: typeof payload.content,
+                      sessionId: currentSessionId,
+                      timestamp: new Date().toISOString()
+                    });
+                    
+                    // 处理 content 可能是 JSON 字符串的情况
+                    let reportData: ReportData;
+                    try {
+                      if (typeof payload.content === 'string') {
+                        reportData = JSON.parse(payload.content);
+                      } else {
+                        reportData = payload.content;
+                      }
+                    } catch (e) {
+                      console.error("❌ [Result Data] 解析报告数据失败", e);
+                      updateLastMessage(msg => ({
+                        ...msg,
+                        content: msg.content + `\n\n❌ 报告解析失败: ${e instanceof Error ? e.message : '未知错误'}`,
+                        isThinkingFinished: true
+                      }));
+                      return;
+                    }
+                    
+                    console.log("📈 [Result Data] 报告数据结构", {
+                      hasMeta: !!reportData.meta,
+                      hasTechQuestions: !!reportData.tech_questions,
+                      techQuestionsCount: reportData.tech_questions?.length || 0,
+                      hasCompanyAnalysis: !!reportData.company_analysis,
+                      sessionIdFromMeta: reportData.meta?.session_id
+                    });
+                    
+                    updateLastMessage(msg => {
+                      const formattedContent = formatReportToMarkdown(reportData);
+                      console.log("📝 [Result Update] 更新消息为报告内容", {
+                        originalContentLength: msg.content?.length || 0,
+                        newContentLength: formattedContent.length,
+                        isJson: true,
+                        willFinishThinking: true
+                      });
+                      
+                      return {
+                        ...msg,
+                        content: formattedContent,
+                        isJson: true,
+                        isThinkingFinished: true,
+                      };
+                    });
+
+                    if (reportData.meta?.session_id) {
+                      console.log("🔗 [Session Update] 更新会话ID", {
+                        oldSessionId: currentSessionId,
+                        newSessionId: reportData.meta.session_id,
+                        willFetchSessions: true
+                      });
+                      setCurrentSessionId(reportData.meta.session_id);
+                      fetchSessions();
+                      if (onSessionCreated) onSessionCreated(reportData.meta.session_id);
                     }
                   }
-                }
 
-                // 5. 处理错误
-                else if (payload.type === 'error') {
-                  logger.error('stream', `后端错误: ${payload.content}`);
-                  
-                  updateLastMessage(msg => {
-                    const errorMessage = `\n\n❌ 后端错误: ${payload.content}`;
-                    return {
-                      ...msg,
-                      content: msg.content + errorMessage,
-                      isThinkingFinished: true,
-                    };
-                  });
-                  return;
+                  // 4. 处理普通正文 Token
+                  else if (payload.type === 'token') {
+                    const tokenContent = payload.content || "";
+                    logger.debug('stream', `Token: ${tokenContent.length} chars`);
+                    
+                    updateLastMessage(msg => {
+                      return {
+                        ...msg,
+                        content: (msg.content || "") + tokenContent,
+                        isThinkingFinished: true
+                      };
+                    });
+
+                    if (isTTSRef.current) {
+                      bufferText += tokenContent;
+                      const sentenceEndRegex = /[。！？\.\!\?\:\n]/;
+                      const isSentenceEnd = sentenceEndRegex.test(tokenContent);
+                      
+                      if (isSentenceEnd) {
+                        logger.debug('stream', `TTS添加到队列: ${bufferText.length} chars`);
+                        addToQueue(bufferText);
+                        bufferText = "";
+                      }
+                    }
+                  }
+
+                  // 5. 处理错误
+                  else if (payload.type === 'error') {
+                    logger.error('stream', `后端错误: ${payload.content}`);
+                    
+                    updateLastMessage(msg => {
+                      const errorMessage = `\n\n❌ 后端错误: ${payload.content}`;
+                      return {
+                        ...msg,
+                        content: msg.content + errorMessage,
+                        isThinkingFinished: true,
+                      };
+                    });
+                    return;
+                  }
                 }
 
               } catch (parseError) {
@@ -428,6 +497,12 @@ export function useChatStream({
         hasRemainingBuffer: !!bufferText.trim(),
         timestamp: new Date().toISOString()
       });
+      
+      // 确保设置 isThinkingFinished 为 true，避免一直显示"正在思考"
+      updateLastMessage(msg => ({
+        ...msg,
+        isThinkingFinished: true
+      }));
       
       setIsLoading(false);
       

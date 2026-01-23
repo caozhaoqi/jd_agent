@@ -74,10 +74,14 @@ export default function MockInterviewPage() {
           
           if (event.startsWith("data: ")) {
             const jsonStr = event.replace("data: ", "").trim();
-            if (jsonStr === "[DONE]") break;
 
             try {
               const msg = JSON.parse(jsonStr);
+              // 检查是否是结束信号
+              if (msg.role === "done" && msg.content === "[DONE]") {
+                // 发送结束信号，跳出循环
+                break;
+              }
               // msg.role 是 'interviewer' 或 'candidate'
               // msg.content 是 内容
               setMessages(prev => [...prev, { role: msg.role, content: msg.content }]);
@@ -93,13 +97,14 @@ export default function MockInterviewPage() {
         buffer = buffer.trim();
         if (buffer.startsWith("data: ")) {
           const jsonStr = buffer.replace("data: ", "").trim();
-          if (jsonStr !== "[DONE]") {
-            try {
-              const msg = JSON.parse(jsonStr);
+          try {
+            const msg = JSON.parse(jsonStr);
+            // 检查是否是结束信号
+            if (msg.role !== "done" || msg.content !== "[DONE]") {
               setMessages(prev => [...prev, { role: msg.role, content: msg.content }]);
-            } catch (e) {
-              console.error('Error parsing final JSON:', e);
             }
+          } catch (e) {
+            console.error('Error parsing final JSON:', e);
           }
         }
       }

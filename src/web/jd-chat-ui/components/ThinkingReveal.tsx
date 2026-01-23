@@ -63,9 +63,7 @@ export default function ThinkingReveal({ thoughts, isFinished }: ThinkingRevealP
         </div>
 
         <span className="font-medium whitespace-nowrap">
-          {!isFinished && !fullContent
-            ? `正在初始化推理引擎... (${duration}s)`
-            : isFinished ? `思考完成 (${duration}s)` : `正在思考... (${duration}s)`}
+          {isFinished ? `思考完成 (${duration}s)` : `正在思考... (${duration}s)`}
         </span>
 
         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
