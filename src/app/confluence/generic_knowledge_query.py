@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
+from contextlib import asynccontextmanager
 
 # 设置HuggingFace国内镜像
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
@@ -15,32 +16,11 @@ from loguru import logger
 
 # 配置路径
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-INDEX_DIR = os.path.join(CURRENT_DIR, "confluence_faiss_index")
-
-# 初始化FastAPI应用
-app = FastAPI(
-    title="知识库通用查询API",
-    description="通过API或UI界面查询Confluence Wiki知识库",
-    version="1.0.0"
-)
-
-# 初始化模板引擎
-templates = Jinja2Templates(directory=".")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(CURRENT_DIR)))
+INDEX_DIR = os.path.join(PROJECT_ROOT, "confluence_faiss_index")
 
 # 全局变量存储知识库实例
 vector_db = None
-
-# 请求模型
-class QueryRequest(BaseModel):
-    query: str
-    k: int = 3
-
-# 响应模型
-class QueryResponse(BaseModel):
-    query: str
-    results: list
-    total: int
-
 
 def load_knowledge_base():
     """加载知识库向量数据库"""
@@ -60,6 +40,10 @@ def load_knowledge_base():
         )
         
         # 加载FAISS向量数据库
+        if not os.path.exists(INDEX_DIR):
+            logger.warning(f"⚠️ 知识库索引目录不存在: {INDEX_DIR}")
+            return None
+            
         vector_db = FAISS.load_local(
             INDEX_DIR,
             embedding_model,
@@ -69,13 +53,50 @@ def load_knowledge_base():
         return vector_db
     except Exception as e:
         logger.error(f"❌ 知识库加载失败: {e}")
-        raise HTTPException(status_code=500, detail=f"知识库加载失败: {str(e)}")
+        # 不抛出异常，允许应用启动，但在查询时报错
+        return None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    try:
+        load_knowledge_base()
+        logger.success("✅ 应用启动成功，知识库加载尝试完成")
+    except Exception as e:
+        logger.error(f"❌ 应用启动初始化失败: {e}")
+    yield
+    # 关闭时的清理工作（如果有）
+
+# 初始化FastAPI应用
+app = FastAPI(
+    title="知识库通用查询API",
+    description="通过API或UI界面查询Confluence Wiki知识库",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# 初始化模板引擎
+templates = Jinja2Templates(directory=".")
+
+# 请求模型
+class QueryRequest(BaseModel):
+    query: str
+    k: int = 3
+
+# 响应模型
+class QueryResponse(BaseModel):
+    query: str
+    results: list
+    total: int
 
 
 def search_knowledge_base(query: str, k: int = 3):
     """在知识库中搜索相关文档"""
     try:
         db = load_knowledge_base()
+        if db is None:
+             raise HTTPException(status_code=503, detail="知识库未加载或不存在，请先构建知识库索引")
+
         # 使用向量数据库的相似性搜索功能
         results = db.similarity_search(
             query=query,
@@ -92,19 +113,11 @@ def search_knowledge_base(query: str, k: int = 3):
             })
         
         return formatted_results
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ 搜索失败: {e}")
         raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """应用启动时加载知识库"""
-    try:
-        load_knowledge_base()
-        logger.success("✅ 应用启动成功，知识库已加载")
-    except Exception as e:
-        logger.error(f"❌ 应用启动失败: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -135,6 +148,8 @@ async def health_check():
     """健康检查接口"""
     try:
         db = load_knowledge_base()
+        if db is None:
+            return {"status": "unhealthy", "message": "知识库未加载"}
         return {"status": "healthy", "message": "知识库服务运行正常"}
     except Exception as e:
         return {"status": "unhealthy", "message": str(e)}
@@ -281,7 +296,8 @@ def create_ui_template():
                 });
                 
                 if (!response.ok) {
-                    throw new Error('查询失败');
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '查询失败');
                 }
                 
                 const data = await response.json();
@@ -342,7 +358,7 @@ def create_ui_template():
 """
     
     # 写入UI模板文件
-    with open("../../../other/knowledge_query_ui.html", "w", encoding="utf-8") as f:
+    with open("knowledge_query_ui.html", "w", encoding="utf-8") as f:
         f.write(ui_html)
     logger.success("✅ UI模板文件创建成功")
 
